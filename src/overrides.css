@@ -1,0 +1,18 @@
+.graph-canvas { z-index: 4; }
+.logo > img { width: 32px; height: 32px; object-fit: contain; }
+
+.branch-item { font-size: 11px; }
+.tag-item { font-size: 10px; }
+.column-head { font-size: 8px; }
+.commit-row .subject { font-size: 11px; }
+.commit-row > code { font-size: 9.5px; }
+.author,
+.commit-row > time { font-size: 9px; }
+.impact-grid span,
+.impact-grid strong,
+.impact-grid em,
+.section-title,
+.parent-row code,
+.parent-row span { font-size: 9px; }
+.module-list > div,
+.analysis-result p { font-size: 9.5px; }

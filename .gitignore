@@ -33,6 +33,13 @@ yarn-error.log*
 .vercel
 next-env.d.ts
 /dist/
+/release/
 /.wrangler/
 /outputs/
 /work/
+design/implementation-v*.png
+design/design-qa-comparison*.png
+design/*.png
+!design/git-atlas-causal-field-final.png
+!design/implementation-final.png
+design/*.json
