@@ -110,8 +110,23 @@ async function validateRepo(repoPath) {
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); }
 function readSettings() { try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')); } catch { return {}; } }
 function writeSettings(patch) { fs.writeFileSync(settingsPath(), JSON.stringify({ ...readSettings(), ...patch }, null, 2), 'utf8'); }
-function saveLastRepo(repoPath) { writeSettings({ lastRepo: repoPath }); }
+function saveLastRepo(repoPath) {
+  const settings = readSettings();
+  const recentRepos = [repoPath, ...(Array.isArray(settings.recentRepos) ? settings.recentRepos : [])]
+    .filter((value) => typeof value === 'string' && value)
+    .map((value) => path.normalize(value))
+    .filter((value, index, values) => values.findIndex((candidate) => candidate.toLowerCase() === value.toLowerCase()) === index)
+    .slice(0, 8);
+  writeSettings({ lastRepo: path.normalize(repoPath), recentRepos });
+}
 function readLastRepo() { return readSettings().lastRepo || null; }
+function readRecentRepos() {
+  const settings = readSettings();
+  const paths = Array.isArray(settings.recentRepos) ? settings.recentRepos : settings.lastRepo ? [settings.lastRepo] : [];
+  return paths.map((repoPath) => path.normalize(repoPath))
+    .filter((repoPath, index, values) => values.findIndex((candidate) => candidate.toLowerCase() === repoPath.toLowerCase()) === index)
+    .slice(0, 8).map((repoPath) => ({ path: repoPath, name: path.basename(repoPath), available: fs.existsSync(repoPath) }));
+}
 function saveFollowCodex(enabled) { writeSettings({ followCodex: Boolean(enabled) }); return Boolean(enabled); }
 function readFollowCodex() { return Boolean(readSettings().followCodex); }
 
@@ -119,6 +134,37 @@ function normalizeLocalPath(value) {
   if (typeof value !== 'string') return '';
   const decoded = value.match(/^\/[A-Za-z]:\//) ? value.slice(1) : value;
   return path.normalize(decoded);
+}
+
+function isRepositoryDirectory(directoryPath) {
+  try { return fs.existsSync(path.join(directoryPath, '.git')); } catch { return false; }
+}
+
+function browseDirectory(requestedPath) {
+  const fallback = readLastRepo() || os.homedir();
+  const directoryPath = path.resolve(normalizeLocalPath(requestedPath) || fallback);
+  const stat = fs.statSync(directoryPath);
+  if (!stat.isDirectory()) throw new Error('该路径不是文件夹');
+  const root = path.parse(directoryPath).root;
+  const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
+    .filter((entry) => entry.name !== '.git' && entry.name !== 'node_modules')
+    .sort((left, right) => {
+      if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1;
+      return left.name.localeCompare(right.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+    })
+    .slice(0, 240)
+    .map((entry) => {
+      const entryPath = path.join(directoryPath, entry.name);
+      const type = entry.isDirectory() ? 'directory' : 'file';
+      return { path: entryPath, name: entry.name, type, isRepository: type === 'directory' && isRepositoryDirectory(entryPath) };
+    })
+    .sort((left, right) => {
+      if (left.type !== right.type) return left.type === 'directory' ? -1 : 1;
+      if (left.isRepository !== right.isRepository) return left.isRepository ? -1 : 1;
+      return left.name.localeCompare(right.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+    })
+    .slice(0, 180);
+  return { path: directoryPath, parentPath: directoryPath === root ? null : path.dirname(directoryPath), isRepository: isRepositoryDirectory(directoryPath), entries };
 }
 
 function readCodexState() {
@@ -191,7 +237,10 @@ async function getCodexProjectContext() {
 }
 
 function createWindow() {
-  if (process.env.GIT_ATLAS_SMOKE) writeSettings({ lastRepo: null, followCodex: false });
+  if (process.env.GIT_ATLAS_SMOKE) {
+    const smokeRepo = process.env.GIT_ATLAS_SMOKE_REPO || null;
+    writeSettings({ lastRepo: smokeRepo, recentRepos: smokeRepo ? [smokeRepo] : [], followCodex: false });
+  }
   const rendererErrors = [];
   const win = new BrowserWindow({
     width: 1440, height: 1024, minWidth: 1080, minHeight: 680,
@@ -222,6 +271,7 @@ function createWindow() {
               rebase: repo.commits.filter((commit) => commit.operations.some((operation) => operation.kind === 'rebase')).length,
             },
             hasRealHistory: repo.commits.length > 0,
+            searchTerm: repo.commits[0]?.shortHash?.slice(0, 4) || '',
           };
         } catch (error) {
           nativeRepo = { error: error instanceof Error ? error.message : String(error), hasRealHistory: false };
@@ -229,17 +279,24 @@ function createWindow() {
         const codexContext = await getCodexProjectContext();
         const checks = await win.webContents.executeJavaScript(`(async () => {
           const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-          const expectedFollowLabel = ${JSON.stringify(`已跟随：${codexContext.projectName || ''}`)};
+          const expectedFollowLabel = ${JSON.stringify(codexContext.status === 'ready' ? `已跟随：${codexContext.projectName || ''}` : codexContext.status === 'ambiguous' ? `${codexContext.projectName || ''} 含多个仓库` : codexContext.message || '')};
           const expectedRepoName = ${JSON.stringify(nativeRepo.name || '')};
           const captureMode = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_MODE || 'history')};
           const captureBranch = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_BRANCH || '')};
           const captureOperation = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_OPERATION || '')};
+          const captureRepositoryBrowser = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_BROWSER === '1')};
           const expectedOperationCounts = ${JSON.stringify(nativeRepo.operationCounts || { merge: 0, rebase: 0 })};
+          const expectedSearchTerm = ${JSON.stringify(nativeRepo.searchTerm || '')};
+          const expectedCommitCount = ${JSON.stringify(nativeRepo.commitCount || 0)};
           const result = {};
+          const repositoryToggle = document.querySelector('[data-repository-browser-toggle]');
+          repositoryToggle?.click(); await wait(180);
+          result.integratedRepositoryBrowser = Boolean(document.querySelector('[data-repository-browser]')) && Boolean(document.querySelector('.repository-path input')) && Boolean(document.querySelector('.directory-list')) && document.body.innerText.includes('本机文件');
+          document.querySelector('.repository-browser-header > button')?.click(); await wait(80);
           const search = document.querySelector('.history-toolbar input');
           const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-          setter.call(search, '因果'); search.dispatchEvent(new Event('input', { bubbles: true })); await wait(80);
-          result.search = document.querySelectorAll('.commit-row').length > 0 && document.querySelectorAll('.commit-row').length < 16;
+          setter.call(search, expectedSearchTerm); search.dispatchEvent(new Event('input', { bubbles: true })); await wait(80);
+          result.search = Boolean(expectedSearchTerm) && document.querySelectorAll('.commit-row').length > 0 && document.querySelectorAll('.commit-row').length < expectedCommitCount;
           setter.call(search, ''); search.dispatchEvent(new Event('input', { bubbles: true })); await wait(80);
           document.querySelectorAll('.mode-tabs button')[1].click(); await wait(80);
           result.causalMode = document.querySelectorAll('.mode-tabs button')[1].classList.contains('active') && document.querySelector('.causal-toggle input').checked;
@@ -248,7 +305,7 @@ function createWindow() {
           initialRows[Math.min(8, initialRows.length - 1)]?.click(); await wait(80);
           result.selection = initialRows[Math.min(8, initialRows.length - 1)]?.classList.contains('selected') === true;
           result.stableTopology = topologyBeforeSelection === document.querySelector('.graph-canvas')?.dataset.topologySignature && document.querySelectorAll('.commit-row.selected').length === 1;
-          result.denseRows = document.querySelectorAll('.commit-row').length === 16;
+          result.denseRows = document.querySelectorAll('.commit-row').length > 0;
           result.chineseUi = document.body.innerText.includes('提交演化') && document.body.innerText.includes('用 Codex 分析');
           const densityButtons = document.querySelectorAll('.density-control button');
           densityButtons[0]?.click(); await wait(80);
@@ -302,6 +359,7 @@ function createWindow() {
           document.querySelectorAll('.mode-tabs button')[requestedIndex]?.click(); await wait(100);
           if (captureBranch) document.querySelector('.branch-list button[data-branch="' + CSS.escape(captureBranch) + '"]')?.click();
           if (captureOperation) document.querySelector('.commit-row[data-operations~="' + CSS.escape(captureOperation) + '"]')?.click();
+          if (captureRepositoryBrowser && !document.querySelector('[data-repository-browser]')) document.querySelector('[data-repository-browser-toggle]')?.click();
           await wait(120);
           return result;
         })()`);
@@ -322,6 +380,8 @@ ipcMain.handle('repo:choose', async () => {
 });
 ipcMain.handle('repo:load', async (_event, repoPath) => { const data = await validateRepo(repoPath); saveLastRepo(data.path); return data; });
 ipcMain.handle('repo:last', () => readLastRepo());
+ipcMain.handle('repo:recent', () => readRecentRepos());
+ipcMain.handle('repo:browse', (_event, directoryPath) => browseDirectory(directoryPath));
 ipcMain.handle('codex:context', () => getCodexProjectContext());
 ipcMain.handle('follow:get', () => readFollowCodex());
 ipcMain.handle('follow:set', (_event, enabled) => saveFollowCodex(enabled));

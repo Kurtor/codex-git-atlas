@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('gitAtlas', {
   chooseRepository: () => ipcRenderer.invoke('repo:choose'),
   loadRepository: (repoPath) => ipcRenderer.invoke('repo:load', repoPath),
   getLastRepository: () => ipcRenderer.invoke('repo:last'),
+  getRecentRepositories: () => ipcRenderer.invoke('repo:recent'),
+  browseDirectory: (directoryPath) => ipcRenderer.invoke('repo:browse', directoryPath),
   getCodexProjectContext: () => ipcRenderer.invoke('codex:context'),
   getFollowCodex: () => ipcRenderer.invoke('follow:get'),
   setFollowCodex: (enabled) => ipcRenderer.invoke('follow:set', enabled),

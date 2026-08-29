@@ -16,6 +16,16 @@ export type RepositoryData = {
   commits: GitCommit[]; refs: RefItem[];
 };
 
+export type RecentRepository = { path: string; name: string; available: boolean };
+
+export type DirectoryEntry = {
+  path: string; name: string; type: 'directory' | 'file'; isRepository: boolean;
+};
+
+export type DirectoryListing = {
+  path: string; parentPath: string | null; isRepository: boolean; entries: DirectoryEntry[];
+};
+
 export type CommitDetails = {
   fullHash: string; shortHash: string; subject: string; author: string; email: string; isoDate: string;
   parents: string[]; files: { file: string; additions: number; deletions: number }[];
@@ -38,6 +48,8 @@ declare global {
       chooseRepository(): Promise<RepositoryData | null>;
       loadRepository(path: string): Promise<RepositoryData>;
       getLastRepository(): Promise<string | null>;
+      getRecentRepositories(): Promise<RecentRepository[]>;
+      browseDirectory(path?: string): Promise<DirectoryListing>;
       getCodexProjectContext(): Promise<CodexProjectContext>;
       getFollowCodex(): Promise<boolean>;
       setFollowCodex(enabled: boolean): Promise<boolean>;
