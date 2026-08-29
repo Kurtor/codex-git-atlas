@@ -221,6 +221,8 @@ function createWindow() {
           const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           const expectedFollowLabel = ${JSON.stringify(`已跟随 · ${codexContext.projectName || ''}`)};
           const expectedRepoName = ${JSON.stringify(nativeRepo.name || '')};
+          const captureMode = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_MODE || 'history')};
+          const captureBranch = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_BRANCH || '')};
           const result = {};
           const search = document.querySelector('.history-toolbar input');
           const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
@@ -257,6 +259,27 @@ function createWindow() {
           finalRows[Math.min(5, finalRows.length - 1)]?.click(); await wait(120);
           document.querySelectorAll('.inspector-actions button')[1]?.click(); await wait(900);
           result.parentComparison = document.body.innerText.includes('已生成对比') && document.querySelectorAll('.changed-files code').length > 0;
+          const modeKeys = ['history', 'causal', 'modules', 'risk'];
+          const modeSelectors = ['.history-detail', '.causal-detail', '.module-detail', '.risk-detail'];
+          const modeResults = {};
+          for (let index = 0; index < modeKeys.length; index += 1) {
+            document.querySelectorAll('.mode-tabs button')[index]?.click(); await wait(100);
+            const workspace = document.querySelector('.mode-workspace');
+            const title = workspace?.querySelector('h1');
+            modeResults[modeKeys[index]] = workspace?.dataset.mode === modeKeys[index] && Boolean(workspace?.querySelector(modeSelectors[index])) && Number.parseFloat(getComputedStyle(title).fontSize) >= 16;
+          }
+          result.distinctModes = Object.values(modeResults).every(Boolean);
+          document.querySelectorAll('.mode-tabs button')[2]?.click(); await wait(80);
+          const allModuleRows = document.querySelectorAll('.commit-row').length;
+          const moduleFilter = document.querySelectorAll('.module-detail button')[1]; moduleFilter?.click(); await wait(100);
+          result.moduleFiltering = Boolean(moduleFilter?.classList.contains('active')) && document.querySelectorAll('.commit-row').length <= allModuleRows;
+          document.querySelectorAll('.module-detail button')[0]?.click(); await wait(60);
+          document.querySelectorAll('.mode-tabs button')[3]?.click(); await wait(80);
+          result.riskQueue = document.querySelectorAll('.risk-queue button').length > 0 && [...document.querySelectorAll('.commit-row .risk-signal b')].every((node) => Number(node.textContent) >= 45);
+          const requestedIndex = Math.max(0, modeKeys.indexOf(captureMode));
+          document.querySelectorAll('.mode-tabs button')[requestedIndex]?.click(); await wait(100);
+          if (captureBranch) document.querySelector('.branch-list button[data-branch="' + CSS.escape(captureBranch) + '"]')?.click();
+          await wait(120);
           return result;
         })()`);
         fs.writeFileSync(process.env.GIT_ATLAS_SMOKE, JSON.stringify({ nativeRepo, codexContext, checks, rendererErrors }, null, 2));

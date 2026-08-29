@@ -6,7 +6,9 @@ import {
   Tag, TreeStructure, Warning, X,
 } from '@phosphor-icons/react';
 import GraphCanvas, { graphHeight } from './GraphCanvas';
+import { collectRelations, commitRiskScore, riskLevel, type AppMode } from './analytics';
 import { demoRepository } from './demo';
+import { ModeWorkspace, ScopeDossier, modeCopy } from './ModeWorkspace';
 import type { CodexProjectContext, CommitDetails, GitCommit, ParentComparison, RepositoryData } from './types';
 
 const ROW_HEIGHT = 43;
@@ -27,6 +29,13 @@ function ModuleHeat({ commit }: { commit: GitCommit }) {
     const intensity = values[index % Math.max(1, values.length)] || 0; const alpha = .14 + Math.min(.86, intensity / total * 2.8);
     return <i key={index} style={{ background: index % 3 === 1 ? `rgba(225,172,50,${alpha})` : `rgba(61,168,255,${alpha})` }} />;
   })}</div>;
+}
+
+function ModeSignal({ commit, mode, relation }: { commit: GitCommit; mode: AppMode; relation: string }) {
+  if (mode === 'history') return <ModuleHeat commit={commit} />;
+  if (mode === 'causal') return <span className={`causal-signal ${relation}`}>{relation === 'focus' ? '当前焦点' : relation === 'ancestor' ? '上游祖先' : relation === 'descendant' ? '下游后继' : '路径之外'}</span>;
+  if (mode === 'modules') { const module = Object.entries(commit.modules).sort((a, b) => b[1] - a[1])[0]; return <span className="module-signal"><b>{module?.[0] || '根目录'}</b><small>{compactNumber(module?.[1] || 0)}</small></span> }
+  const score = commitRiskScore(commit); return <span className={`risk-signal ${riskLevel(score)}`}><b>{score}</b><small>{score >= 70 ? '高风险' : score >= 45 ? '中风险' : '低风险'}</small></span>;
 }
 
 function DiffBar({ commit }: { commit: GitCommit }) {
@@ -79,13 +88,17 @@ function Inspector({ commit, details, comparison, analyzing, comparing, analysis
 
 export default function App() {
   const [data, setData] = useState<RepositoryData>(demoRepository); const [isDemo, setIsDemo] = useState(true); const [activeBranch, setActiveBranch] = useState('全部'); const [query, setQuery] = useState('');
-  const [selectedHash, setSelectedHash] = useState(demoRepository.commits[5].hash); const [causalOnly, setCausalOnly] = useState(false); const [mode, setMode] = useState<'history'|'causal'|'modules'|'risk'>('history'); const [details, setDetails] = useState<CommitDetails | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [analysis, setAnalysis] = useState(''); const [analyzing, setAnalyzing] = useState(false);
+  const [selectedHash, setSelectedHash] = useState(demoRepository.commits[5].hash); const [causalOnly, setCausalOnly] = useState(false); const [mode, setMode] = useState<AppMode>('history'); const [activeModule, setActiveModule] = useState('全部模块'); const [details, setDetails] = useState<CommitDetails | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [analysis, setAnalysis] = useState(''); const [analyzing, setAnalyzing] = useState(false);
   const [density, setDensity] = useState<'compact'|'standard'|'relaxed'>('standard'); const [comparison, setComparison] = useState<ParentComparison | null>(null); const [comparing, setComparing] = useState(false);
   const [followCodex, setFollowCodex] = useState(false); const [followContext, setFollowContext] = useState<CodexProjectContext | null>(null);
   const dataPathRef = useRef(data.path); const loadSequenceRef = useRef(0);
   const selected = data.commits.find((commit) => commit.hash === selectedHash) || data.commits[0];
   const rowHeight = density === 'compact' ? 36 : density === 'relaxed' ? 52 : ROW_HEIGHT; const expandedHeight = density === 'compact' ? 158 : density === 'relaxed' ? 216 : EXPANDED_HEIGHT;
-  const visible = useMemo(() => data.commits.filter((commit) => (activeBranch === '全部' || commit.branches.includes(activeBranch)) && (!query || `${commit.shortHash} ${commit.subject} ${commit.author} ${commit.refs.join(' ')}`.toLowerCase().includes(query.toLowerCase())) && (mode !== 'risk' || commit.deletions > 30 || commit.additions + commit.deletions > 500)), [data, activeBranch, query, mode]);
+  const scoped = useMemo(() => data.commits.filter((commit) => (activeBranch === '全部' || commit.branches.includes(activeBranch)) && (!query || `${commit.shortHash} ${commit.subject} ${commit.author} ${commit.refs.join(' ')}`.toLowerCase().includes(query.toLowerCase()))), [data, activeBranch, query]);
+  const relations = useMemo(() => collectRelations(data.commits, selectedHash), [data.commits, selectedHash]);
+  const visible = useMemo(() => scoped.filter((commit) => (mode !== 'risk' || commitRiskScore(commit) >= 45) && (mode !== 'modules' || activeModule === '全部模块' || Boolean(commit.modules[activeModule])) && (mode !== 'causal' || !causalOnly || relations.all.has(commit.hash))), [scoped, mode, activeModule, causalOnly, relations]);
+  const switchMode = (nextMode: AppMode) => { setMode(nextMode); setCausalOnly(nextMode === 'causal'); if (nextMode !== 'modules') setActiveModule('全部模块') };
+  const columnLabels = mode === 'history' ? ['稳定拓扑','提交','提交信息','模块热度','变更规模','作者','提交时间'] : mode === 'causal' ? ['因果路径','提交','路径事件','关系','变更规模','作者','提交时间'] : mode === 'modules' ? ['模块轨迹','提交','触达事件','主模块','变更规模','作者','提交时间'] : ['风险轨迹','提交','待检查事件','风险评分','变更规模','作者','提交时间'];
 
   const applyRepository = useCallback(async (repoPath: string, options: { force?: boolean } = {}) => {
     if (!window.gitAtlas || (!options.force && dataPathRef.current.toLowerCase() === repoPath.toLowerCase())) return;
@@ -112,6 +125,7 @@ export default function App() {
     return () => { cancelled = true; window.clearInterval(timer); document.removeEventListener('visibilitychange', syncWhenVisible) };
   }, [applyRepository, followCodex]);
   useEffect(() => { if (!selected || isDemo || !window.gitAtlas) { setDetails(null); return } window.gitAtlas.getCommitDetails(data.path, selected.hash).then(setDetails).catch(() => setDetails(null)) }, [selected?.hash, data.path, isDemo]);
+  useEffect(() => { if (visible.length && !visible.some((commit) => commit.hash === selectedHash)) setSelectedHash(visible[0].hash) }, [visible, selectedHash]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); document.querySelector<HTMLInputElement>('.history-toolbar input')?.focus() } if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { const index = visible.findIndex((commit) => commit.hash === selectedHash); const next = event.key === 'ArrowDown' ? Math.min(visible.length - 1, index + 1) : Math.max(0, index - 1); if (visible[next]) setSelectedHash(visible[next].hash) } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey) }, [visible, selectedHash]);
 
   const openRepository = async () => {
@@ -124,18 +138,20 @@ export default function App() {
   const compareParent = async () => { if (!selected) return; if (!window.gitAtlas || isDemo) { setComparison({ parentHash: selected.parents[0] || null, additions: selected.additions, deletions: selected.deletions, files: Object.keys(selected.modules).map((file) => ({ file, additions: Math.round(selected.modules[file] * .72), deletions: Math.round(selected.modules[file] * .18) })) }); return } setComparing(true); try { setComparison(await window.gitAtlas.compareWithParent(data.path, selected.hash)) } catch (cause) { setError(`无法生成提交对比：${cause instanceof Error ? cause.message : String(cause)}`) } finally { setComparing(false) } };
 
   return <main className="app"><div className="titlebar" />
-    <nav className="topbar"><div className="logo"><img src="./git-atlas-mark.png" alt="" /><span><strong>Git Atlas</strong><small>可变形因果场</small></span></div><div className="mode-tabs"><button className={mode === 'history' ? 'active' : ''} onClick={() => { setMode('history'); setCausalOnly(false) }}><ClockCounterClockwise />提交演化</button><button className={mode === 'causal' ? 'active' : ''} onClick={() => { setMode('causal'); setCausalOnly(true) }}><Path />因果场</button><button className={mode === 'modules' ? 'active' : ''} onClick={() => setMode('modules')}><TreeStructure />模块影响</button><button className={mode === 'risk' ? 'active' : ''} onClick={() => setMode('risk')}><Warning />风险路径</button></div><div className="density-control"><span>列表密度</span><div role="group" aria-label="列表密度">{([['compact','紧凑'],['standard','标准'],['relaxed','宽松']] as const).map(([value,label]) => <button key={value} className={density === value ? 'active' : ''} onClick={() => setDensity(value)}>{label}</button>)}</div></div><label className="causal-toggle"><input type="checkbox" checked={causalOnly} onChange={(event) => setCausalOnly(event.target.checked)} /><i />只看关联路径</label><time>{todayLabel}</time></nav>
+    <nav className={`topbar active-mode-${mode}`}><div className="logo"><img src="./git-atlas-mark.png" alt="" /><span><strong>Git Atlas</strong><small>仓库情报工作台</small></span></div><div className="mode-tabs">{([['history', ClockCounterClockwise], ['causal', Path], ['modules', TreeStructure], ['risk', Warning]] as const).map(([value, Icon]) => <button key={value} className={mode === value ? 'active' : ''} onClick={() => switchMode(value)}><Icon /><span>{modeCopy[value].title}</span></button>)}</div><div className="density-control"><span>列表密度</span><div role="group" aria-label="列表密度">{([['compact','紧凑'],['standard','标准'],['relaxed','宽松']] as const).map(([value,label]) => <button key={value} className={density === value ? 'active' : ''} onClick={() => setDensity(value)}>{label}</button>)}</div></div>{mode === 'causal' ? <label className="causal-toggle"><input type="checkbox" checked={causalOnly} onChange={(event) => setCausalOnly(event.target.checked)} /><i />只看关联路径</label> : <span className="mode-context">{mode === 'history' ? '时间序列' : mode === 'modules' ? activeModule : '中高风险'}</span>}<time>{todayLabel}</time></nav>
     <div className="layout"><Sidebar data={data} activeBranch={activeBranch} selectedHash={selectedHash} followCodex={followCodex} followContext={followContext} onBranch={setActiveBranch} onSelect={(hash) => { setSelectedHash(hash); setComparison(null) }} onOpen={openRepository} onFollow={toggleFollowCodex} />
-      <section className="history"><header className="history-toolbar"><div><strong>提交演化</strong><span>{visible.length} 个提交{isDemo && ' · 演示数据'}{followCodex && ' · 跟随 Codex'}</span></div><label><MagnifyingGlass /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提交、作者或哈希" /><kbd>Ctrl K</kbd></label><button onClick={openRepository}><GitPullRequest />打开仓库</button><button onClick={refreshRepository} aria-label="刷新"><ArrowsClockwise /></button></header>
+      <section className="history"><header className="history-toolbar"><div><strong>{modeCopy[mode].title}</strong><span>{visible.length} 个可见提交{isDemo && ' · 演示数据'}{followCodex && ' · 跟随 Codex'}</span></div><label><MagnifyingGlass /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提交、作者、哈希或引用" /><kbd>Ctrl K</kbd></label><button onClick={openRepository}><GitPullRequest />打开仓库</button><button onClick={refreshRepository} aria-label="刷新"><ArrowsClockwise /></button></header>
         {error && <div className="toast"><Warning />{error}<button onClick={() => setError('')}><X /></button></div>}
         {loading && <div className="loading"><ArrowsClockwise /><span>{followCodex ? '正在跟随 Codex 切换仓库…' : '正在读取仓库历史…'}</span></div>}
-        <div className="history-scroll"><div className="column-head"><span>因果拓扑</span><span>提交</span><span>提交信息</span><span>模块热度</span><span>变更规模</span><span>作者</span><span>提交时间</span></div>
+        {selected && <ModeWorkspace mode={mode} data={data} commits={scoped} selected={selected} activeModule={activeModule} onModule={setActiveModule} onSelect={(hash) => { setSelectedHash(hash); setAnalysis(''); setComparison(null) }} />}
+        <div className="history-scroll"><div className="column-head">{columnLabels.map((label) => <span key={label}>{label}</span>)}</div>
           <div className="commit-stack" style={{ height: graphHeight(visible, selectedHash, rowHeight, expandedHeight) }}><GraphCanvas commits={visible} selectedHash={selectedHash} causalOnly={causalOnly} rowHeight={rowHeight} expandedHeight={expandedHeight} />
             {visible.map((commit, index) => <div role="button" tabIndex={0} key={commit.hash} className={`commit-row ${commit.hash === selectedHash ? 'selected' : ''}`} style={{ height: rowHeight, gridTemplateRows: `${rowHeight}px` }} onClick={() => { setSelectedHash(commit.hash); setAnalysis(''); setComparison(null) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedHash(commit.hash); setAnalysis(''); setComparison(null) } }}>
-              <span className="row-index">{String(index + 1).padStart(2, '0')}</span><span className="graph-space" /><code>{commit.shortHash}</code><span className="subject">{commit.subject}{commit.refs.slice(0,2).map((ref) => <i key={ref}>{ref.replace('HEAD -> ', '')}</i>)}</span><ModuleHeat commit={commit} /><DiffBar commit={commit} /><span className="author">{commit.author}</span><time>{relativeTime(commit.isoDate)}</time>
+              <span className="row-index">{String(index + 1).padStart(2, '0')}</span><span className="graph-space" /><code>{commit.shortHash}</code><span className="subject">{commit.subject}{commit.refs.slice(0,2).map((ref) => <i key={ref}>{ref.replace('HEAD -> ', '')}</i>)}</span><ModeSignal commit={commit} mode={mode} relation={commit.hash === selectedHash ? 'focus' : relations.ancestors.has(commit.hash) ? 'ancestor' : relations.descendants.has(commit.hash) ? 'descendant' : 'outside'} /><DiffBar commit={commit} /><span className="author">{commit.author}</span><time>{relativeTime(commit.isoDate)}</time>
             </div>)}
           </div>
-        </div><footer className="legend"><span><i style={{ background:'#9cff57' }} />main</span><span><i style={{ background:'#9466ff' }} />feature/causal-lens</span><span><i style={{ background:'#3da8ff' }} />feature/render-pipeline</span><span><GitMerge />合并提交</span><span><GitCommitIcon />分支点</span><span><b />当前 HEAD</span></footer>
+          {visible.length > 0 && <ScopeDossier commits={visible} />}
+        </div><footer className="legend">{data.refs.filter((ref) => ref.type === 'local').slice(0,3).map((ref, index) => <span key={ref.full}><i style={{ background:['#9cff57','#9466ff','#3da8ff'][index] }} />{ref.short}</span>)}<span><GitMerge />合并提交</span><span><GitCommitIcon />分支点</span><span><b />当前 HEAD</span></footer>
       </section>
       {selected && <Inspector commit={selected} details={details} comparison={comparison} analyzing={analyzing} comparing={comparing} analysis={analysis} onAnalyze={analyze} onCompare={compareParent} />}
     </div>
