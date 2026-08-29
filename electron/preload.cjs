@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('gitAtlas', {
   getFollowCodex: () => ipcRenderer.invoke('follow:get'),
   setFollowCodex: (enabled) => ipcRenderer.invoke('follow:set', enabled),
   getCommitDetails: (repoPath, hash) => ipcRenderer.invoke('commit:details', repoPath, hash),
+  compareWithParent: (repoPath, hash) => ipcRenderer.invoke('commit:compare-parent', repoPath, hash),
   analyzeWithCodex: (repoPath, hash) => ipcRenderer.invoke('codex:analyze', repoPath, hash),
   openExternal: (target) => ipcRenderer.invoke('external:open', target),
 });

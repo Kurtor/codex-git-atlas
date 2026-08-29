@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile);
 const isDev = !app.isPackaged;
 const COLORS = ['#59a8ff', '#a36aff', '#e1ac32', '#4fc1a2', '#ed6d66', '#7791ad', '#ce7bb6', '#8ea565'];
 let codexContextCache = { signature: '', expiresAt: 0, value: null };
+let codexStateCache = { filePath: '', modifiedAt: -1, value: null };
 
 async function git(cwd, args, timeout = 30000) {
   const { stdout } = await execFileAsync('git', args, { cwd, timeout, maxBuffer: 40 * 1024 * 1024, windowsHide: true });
@@ -100,7 +101,13 @@ function readCodexState() {
     ? [explicit]
     : [path.join(codexHome, '.codex-global-state.json'), path.join(codexHome, '.codex-global-state.json.bak')];
   for (const candidate of candidates) {
-    try { return JSON.parse(fs.readFileSync(candidate, 'utf8')); } catch { /* Codex may be replacing the state file atomically. */ }
+    try {
+      const modifiedAt = fs.statSync(candidate).mtimeMs;
+      if (codexStateCache.filePath === candidate && codexStateCache.modifiedAt === modifiedAt) return codexStateCache.value;
+      const value = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+      codexStateCache = { filePath: candidate, modifiedAt, value };
+      return value;
+    } catch { /* Codex may be replacing the state file atomically. */ }
   }
   return null;
 }
@@ -206,6 +213,11 @@ function createWindow() {
           result.selection = initialRows[Math.min(8, initialRows.length - 1)]?.classList.contains('selected') === true;
           result.denseRows = document.querySelectorAll('.commit-row').length === 16;
           result.chineseUi = document.body.innerText.includes('提交演化') && document.body.innerText.includes('用 Codex 分析');
+          const densityButtons = document.querySelectorAll('.density-control button');
+          densityButtons[0]?.click(); await wait(80);
+          result.densityControl = densityButtons[0]?.classList.contains('active') && document.querySelector('.commit-row:not(.selected)')?.style.height === '36px';
+          densityButtons[1]?.click(); await wait(80);
+          result.activityOverview = document.body.innerText.includes('提交活跃度') && document.querySelectorAll('.activity-chart button:not(:disabled)').length > 0;
           const follow = document.querySelector('.follow-switch input');
           if (follow && !follow.checked) follow.click(); await wait(2200);
           result.followControl = Boolean(follow?.checked) && document.body.innerText.includes('跟随 Codex');
@@ -216,6 +228,8 @@ function createWindow() {
           document.querySelectorAll('.mode-tabs button')[0].click(); await wait(80);
           const finalRows = document.querySelectorAll('.commit-row');
           finalRows[Math.min(5, finalRows.length - 1)]?.click(); await wait(120);
+          document.querySelectorAll('.inspector-actions button')[1]?.click(); await wait(900);
+          result.parentComparison = document.body.innerText.includes('已生成对比') && document.querySelectorAll('.changed-files code').length > 0;
           return result;
         })()`);
         fs.writeFileSync(process.env.GIT_ATLAS_SMOKE, JSON.stringify({ nativeRepo, codexContext, checks, rendererErrors }, null, 2));
@@ -244,6 +258,23 @@ ipcMain.handle('commit:details', async (_event, repoPath, hash) => {
   const [fullHash, shortHash, subject, author, email, isoDate, parents = ''] = header.trim().split('\x1f');
   const files = stats.trim().split(/\r?\n/).filter(Boolean).map((line) => { const [a, d, file] = line.split('\t'); return { file, additions: Number(a) || 0, deletions: Number(d) || 0 } });
   return { fullHash, shortHash, subject, author, email, isoDate, parents: parents.split(' ').filter(Boolean), files };
+});
+ipcMain.handle('commit:compare-parent', async (_event, repoPath, hash) => {
+  const ancestry = (await git(repoPath, ['rev-list', '--parents', '-n', '1', hash])).trim().split(' ');
+  const parentHash = ancestry[1] || null;
+  const raw = parentHash
+    ? await git(repoPath, ['diff', '--no-renames', '--numstat', parentHash, hash])
+    : await git(repoPath, ['diff-tree', '--root', '--no-commit-id', '--numstat', '-r', hash]);
+  const files = raw.trim().split(/\r?\n/).filter(Boolean).map((line) => {
+    const [a, d, file] = line.split('\t');
+    return { file, additions: Number(a) || 0, deletions: Number(d) || 0 };
+  });
+  return {
+    parentHash,
+    files,
+    additions: files.reduce((sum, file) => sum + file.additions, 0),
+    deletions: files.reduce((sum, file) => sum + file.deletions, 0),
+  };
 });
 ipcMain.handle('codex:analyze', async (_event, repoPath, hash) => {
   const prompt = `请以只读方式分析 Git 提交 ${hash}。用中文给出：1. 改动意图；2. 关键文件和模块；3. 潜在回归风险；4. 建议验证的测试。不要修改任何文件。`;

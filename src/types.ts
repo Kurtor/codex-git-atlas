@@ -16,6 +16,11 @@ export type CommitDetails = {
   parents: string[]; files: { file: string; additions: number; deletions: number }[];
 };
 
+export type ParentComparison = {
+  parentHash: string | null; additions: number; deletions: number;
+  files: { file: string; additions: number; deletions: number }[];
+};
+
 export type CodexProjectContext = {
   status: 'checking' | 'ready' | 'unavailable' | 'not-git' | 'ambiguous';
   projectId?: string | null; projectName?: string; projectPath?: string | null; repoPath?: string;
@@ -32,6 +37,7 @@ declare global {
       getFollowCodex(): Promise<boolean>;
       setFollowCodex(enabled: boolean): Promise<boolean>;
       getCommitDetails(path: string, hash: string): Promise<CommitDetails>;
+      compareWithParent(path: string, hash: string): Promise<ParentComparison>;
       analyzeWithCodex(path: string, hash: string): Promise<string>;
       openExternal(target: string): Promise<void>;
     };
