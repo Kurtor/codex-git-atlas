@@ -43,15 +43,15 @@ export default function GraphCanvas({ commits, selectedHash, causalOnly, rowHeig
 
     for (let index = commits.length - 1; index >= 0; index -= 1) {
       const commit = commits[index]; const startX = laneX(commit); const startY = centers[index];
-      const parents = commit.parents.length ? commit.parents : index < commits.length - 1 ? [commits[index + 1].hash] : [];
-      parents.forEach((parentHash, parentOffset) => {
-        const parentIndex = indexByHash.get(parentHash) ?? Math.min(index + 1, commits.length - 1); if (parentIndex === index) return;
-        const parent = commits[parentIndex]; const endX = laneX(parent) + parentOffset * 10; const endY = centers[parentIndex];
+      commit.parents.forEach((parentHash, parentOffset) => {
+        const parentIndex = indexByHash.get(parentHash); if (parentIndex === undefined || parentIndex === index) return;
+        const parent = commits[parentIndex]; const endX = laneX(parent); const endY = centers[parentIndex];
         const isRelated = related.has(commit.hash) || related.has(parentHash); context.globalAlpha = causalOnly && !isRelated ? .06 : .64;
         const pathColor = parentOffset > 0 ? parent.color : commit.color;
         context.strokeStyle = pathColor; context.lineWidth = commit.hash === selectedHash || parentHash === selectedHash ? 2.15 : 1.3;
         context.shadowColor = pathColor; context.shadowBlur = commit.hash === selectedHash || parentHash === selectedHash ? 8 : 0;
-        context.beginPath(); context.moveTo(startX, startY); const bend = Math.max(22, Math.abs(endY - startY) * .42); context.bezierCurveTo(startX, startY + bend, endX, endY - bend, endX, endY); context.stroke(); context.shadowBlur = 0;
+        const direction = endX === startX ? 1 : Math.sign(endX - startX); const separation = parentOffset > 0 ? direction * 10 : 0;
+        context.beginPath(); context.moveTo(startX, startY); const bend = Math.max(22, Math.abs(endY - startY) * .42); context.bezierCurveTo(startX + separation, startY + bend, endX + separation, endY - bend, endX, endY); context.stroke(); context.shadowBlur = 0;
       });
     }
 
