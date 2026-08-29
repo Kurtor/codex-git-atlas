@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowsClockwise, BracketsCurly, CaretDown, ChartLineUp, CheckCircle,
+  ArrowRight, ArrowsClockwise, BracketsCurly, CaretDown, ChartLineUp, CheckCircle,
   CirclesThreePlus, ClockCounterClockwise, Code, GitBranch, GitCommit as GitCommitIcon, GitFork,
   GitMerge, GitPullRequest, MagnifyingGlass, Minus, Path, Plus, Robot, SidebarSimple,
   Tag, TreeStructure, Warning, X,
@@ -41,6 +41,13 @@ function DiffBar({ commit }: { commit: GitCommit }) {
   return <div className="diff-wrap"><span className="add">+{compactNumber(commit.additions)}</span><span className="del">−{compactNumber(commit.deletions)}</span><div className="diff-bar"><i style={{ width: `${add}%` }} /><em /></div></div>;
 }
 
+function OperationBadges({ commit }: { commit: GitCommit }) {
+  return <>{commit.operations.map((operation) => <span key={`${operation.kind}-${operation.source}-${operation.target}`} className={`operation-badge ${operation.kind}`} data-operation={operation.kind} title={`${operation.kind === 'merge' ? '合并' : 'Rebase'}：${operation.source} → ${operation.target}`}>
+    {operation.kind === 'merge' ? <GitMerge weight="bold" /> : <ArrowsClockwise weight="bold" />}
+    {operation.kind === 'merge' ? '合并' : 'REBASE'}
+  </span>)}</>;
+}
+
 function ActivityOverview({ commits, selectedHash, onSelect }: { commits: GitCommit[]; selectedHash: string; onSelect: (hash: string) => void }) {
   const dated = commits.filter((commit) => Number.isFinite(new Date(commit.isoDate).getTime()));
   if (!dated.length) return <section className="activity-section"><div className="side-title"><span>提交活跃度</span><ChartLineUp /></div><div className="empty-side">暂无时间数据</div></section>;
@@ -73,11 +80,15 @@ function Inspector({ commit, details, comparison, analyzing, comparing, analysis
   const changedFiles = comparison?.files || details?.files || [];
   return <aside className="inspector"><header><span>提交详情</span><button aria-label="关闭详情"><X /></button></header>
     <section className="commit-summary"><div className="hash-copy"><code>{commit.shortHash}</code><button onClick={() => navigator.clipboard.writeText(commit.hash)}>复制</button></div><h2>{commit.subject}</h2><p><span className="avatar">{commit.author.slice(0,1)}</span>{commit.author}<time>{new Date(commit.isoDate).toLocaleString('zh-CN')}</time></p></section>
+    {commit.operations.length > 0 && <section className="branch-operations"><div className="section-title">分支行为</div>{commit.operations.map((operation) => <div className={`branch-operation ${operation.kind}`} data-operation-detail={operation.kind} key={`${operation.kind}-${operation.source}-${operation.target}`}>
+      <span className="operation-icon">{operation.kind === 'merge' ? <GitMerge weight="bold" /> : <ArrowsClockwise weight="bold" />}</span>
+      <div><strong>{operation.kind === 'merge' ? '合并完成' : 'Rebase 完成'}</strong><b><code>{operation.source}</code><ArrowRight /><code>{operation.target}</code></b><small>{operation.kind === 'merge' ? `${operation.parentCount || commit.parents.length} 条父线在此汇合，依据提交结构识别` : '依据本机 Git reflog 识别，记录过期后可能不再显示'}</small></div>
+    </div>)}</section>}
     <section><div className="section-title">变更规模</div><div className="diff-numbers"><b>+{commit.additions}</b><em>−{commit.deletions}</em><DiffBar commit={commit} /></div></section>
     <section><div className="section-title">受影响模块 ({modules.length})</div><div className="module-list">{modules.map(([name, value], index) => <div key={name}><span>{name}</span><i><b style={{ width: `${Math.max(12, value / max * 100)}%` }} /></i><strong>+{Math.round(value * .72)}</strong><em>−{Math.round(value * .18)}</em></div>)}</div></section>
     <section className="scope-stats"><div className="section-title">影响范围</div><div><span><Code /> <b>{details?.files.length ?? Object.keys(commit.modules).length * 6}</b><small>文件</small></span><span><Plus /> <b>{compactNumber(commit.additions)}</b><small>添加</small></span><span><Minus /> <b>{compactNumber(commit.deletions)}</b><small>删除</small></span></div></section>
     {changedFiles.length > 0 && <section className="changed-files"><div className="section-title">{comparison ? comparison.parentHash ? `与 ${comparison.parentHash.slice(0,7)} 对比` : '根提交变更' : '变更文件'} ({changedFiles.length})</div>{changedFiles.slice(0, comparison ? 10 : 4).map((file) => <div key={file.file} title={file.file}><code>{file.file}</code><strong>+{file.additions}</strong><em>−{file.deletions}</em></div>)}{!comparison && changedFiles.length > 4 && <small>生成对比可查看完整列表</small>}</section>}
-    <section className="risk-explain"><div className="section-title">风险评估 <span className={`risk ${level}`}>{score}，{risk}</span></div><div className="risk-meter"><i style={{ width: `${score}%` }} /><b style={{ left: `${score}%` }} /></div><div className="risk-factors"><span>变更规模 <b>{compactNumber(churn)}</b></span><span>删除比例 <b>{deletionRatio}%</b></span><span>模块跨度 <b>{Object.keys(commit.modules).length}</b></span><span>提交结构 <b>{commit.parents.length > 1 ? '合并' : '普通'}</b></span></div><p className="risk-note">由变更规模、删除比例、模块跨度与合并结构计算，范围 0-100。</p></section>
+    <section className="risk-explain"><div className="section-title">风险评估 <span className={`risk ${level}`}>{score}，{risk}</span></div><div className="risk-meter"><i style={{ width: `${score}%` }} /><b style={{ left: `${score}%` }} /></div><div className="risk-factors"><span>变更规模 <b>{compactNumber(churn)}</b></span><span>删除比例 <b>{deletionRatio}%</b></span><span>模块跨度 <b>{Object.keys(commit.modules).length}</b></span><span>提交结构 <b>{commit.operations.some((operation) => operation.kind === 'merge') ? '合并' : commit.operations.some((operation) => operation.kind === 'rebase') ? 'Rebase' : '普通'}</b></span></div><p className="risk-note">由变更规模、删除比例、模块跨度与合并结构计算，范围 0-100。</p></section>
     <section><div className="section-title">父提交</div>{commit.parents.slice(0, 2).map((parent, index) => <div className="parent-row" key={parent}><i style={{ background: index ? '#9b8ae7' : '#68a8e8' }} /><code>{parent.slice(0,7)}</code><span>{index ? '合并来源' : '直接父提交'}</span></div>)}</section>
     {analysis && <section className="analysis-result"><div className="section-title"><CheckCircle /> Codex 分析</div><p>{analysis}</p></section>}
     <div className="inspector-actions"><button className="codex-button" onClick={onAnalyze} disabled={analyzing}><Robot weight="fill" />{analyzing ? '正在分析…' : '用 Codex 分析'}</button><button onClick={onCompare} disabled={comparing}><GitMerge />{comparing ? '正在比较…' : comparison ? '已生成对比' : commit.parents.length ? '比较父提交' : '查看根提交变更'}</button></div>
@@ -92,7 +103,7 @@ export default function App() {
   const dataPathRef = useRef(data.path); const loadSequenceRef = useRef(0);
   const selected = data.commits.find((commit) => commit.hash === selectedHash) || data.commits[0];
   const rowHeight = density === 'compact' ? 36 : density === 'relaxed' ? 52 : ROW_HEIGHT; const expandedHeight = density === 'compact' ? 158 : density === 'relaxed' ? 216 : EXPANDED_HEIGHT;
-  const scoped = useMemo(() => data.commits.filter((commit) => (activeBranch === '全部' || commit.branches.includes(activeBranch)) && (!query || `${commit.shortHash} ${commit.subject} ${commit.author} ${commit.refs.join(' ')}`.toLowerCase().includes(query.toLowerCase()))), [data, activeBranch, query]);
+  const scoped = useMemo(() => data.commits.filter((commit) => (activeBranch === '全部' || commit.branches.includes(activeBranch)) && (!query || `${commit.shortHash} ${commit.subject} ${commit.author} ${commit.refs.join(' ')} ${commit.operations.map((operation) => `${operation.kind} ${operation.source} ${operation.target}`).join(' ')}`.toLowerCase().includes(query.toLowerCase()))), [data, activeBranch, query]);
   const relations = useMemo(() => collectRelations(data.commits, selectedHash), [data.commits, selectedHash]);
   const visible = useMemo(() => scoped.filter((commit) => (mode !== 'risk' || commitRiskScore(commit) >= 45) && (mode !== 'modules' || activeModule === '全部模块' || Boolean(commit.modules[activeModule])) && (mode !== 'causal' || !causalOnly || relations.all.has(commit.hash))), [scoped, mode, activeModule, causalOnly, relations]);
   const switchMode = (nextMode: AppMode) => { setMode(nextMode); setCausalOnly(nextMode === 'causal'); if (nextMode !== 'modules') setActiveModule('全部模块') };
@@ -144,12 +155,12 @@ export default function App() {
         {selected && <ModeWorkspace mode={mode} data={data} commits={scoped} selected={selected} activeModule={activeModule} onModule={setActiveModule} onSelect={(hash) => { setSelectedHash(hash); setAnalysis(''); setComparison(null) }} />}
         <div className="history-scroll"><div className="column-head">{columnLabels.map((label) => <span key={label}>{label}</span>)}</div>
           <div className="commit-stack" style={{ height: graphHeight(visible, selectedHash, rowHeight, expandedHeight) }}><GraphCanvas commits={visible} selectedHash={selectedHash} causalOnly={causalOnly} rowHeight={rowHeight} expandedHeight={expandedHeight} />
-            {visible.map((commit, index) => <div role="button" tabIndex={0} key={commit.hash} className={`commit-row ${commit.hash === selectedHash ? 'selected' : ''}`} style={{ height: rowHeight, gridTemplateRows: `${rowHeight}px` }} onClick={() => { setSelectedHash(commit.hash); setAnalysis(''); setComparison(null) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedHash(commit.hash); setAnalysis(''); setComparison(null) } }}>
-              <span className="row-index">{String(index + 1).padStart(2, '0')}</span><span className="graph-space" /><code>{commit.shortHash}</code><span className="subject">{commit.subject}{commit.refs.slice(0,2).map((ref) => <i key={ref}>{ref.replace('HEAD -> ', '')}</i>)}</span><ModeSignal commit={commit} mode={mode} relation={commit.hash === selectedHash ? 'focus' : relations.ancestors.has(commit.hash) ? 'ancestor' : relations.descendants.has(commit.hash) ? 'descendant' : 'outside'} /><DiffBar commit={commit} /><span className="author">{commit.author}</span><time>{relativeTime(commit.isoDate)}</time>
+            {visible.map((commit, index) => <div role="button" tabIndex={0} key={commit.hash} data-operations={commit.operations.map((operation) => operation.kind).join(' ') || undefined} className={`commit-row ${commit.hash === selectedHash ? 'selected' : ''} ${commit.operations.length ? 'has-operation' : ''}`} style={{ height: rowHeight, gridTemplateRows: `${rowHeight}px` }} onClick={() => { setSelectedHash(commit.hash); setAnalysis(''); setComparison(null) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedHash(commit.hash); setAnalysis(''); setComparison(null) } }}>
+              <span className="row-index">{String(index + 1).padStart(2, '0')}</span><span className="graph-space" /><code>{commit.shortHash}</code><span className="subject"><span className="subject-title">{commit.subject}</span><OperationBadges commit={commit} />{commit.refs.slice(0,2).map((ref) => <i key={ref}>{ref.replace('HEAD -> ', '')}</i>)}</span><ModeSignal commit={commit} mode={mode} relation={commit.hash === selectedHash ? 'focus' : relations.ancestors.has(commit.hash) ? 'ancestor' : relations.descendants.has(commit.hash) ? 'descendant' : 'outside'} /><DiffBar commit={commit} /><span className="author">{commit.author}</span><time>{relativeTime(commit.isoDate)}</time>
             </div>)}
           </div>
           {visible.length > 0 && <ScopeDossier commits={visible} />}
-        </div><footer className="legend">{data.refs.filter((ref) => ref.type === 'local').slice(0,3).map((ref, index) => <span key={ref.full}><i style={{ background:['#68a8e8','#9b8ae7','#d4a855'][index] }} />{ref.short}</span>)}<span><GitMerge />合并提交</span><span><GitCommitIcon />分支点</span><span><b />当前 HEAD</span></footer>
+        </div><footer className="legend">{data.refs.filter((ref) => ref.type === 'local').slice(0,3).map((ref, index) => <span key={ref.full}><i style={{ background:['#68a8e8','#9b8ae7','#d4a855'][index] }} />{ref.short}</span>)}<span className="legend-merge"><GitMerge />合并节点</span><span className="legend-rebase"><ArrowsClockwise />Rebase 事件</span><span><GitCommitIcon />分支点</span><span><b />当前 HEAD</span></footer>
       </section>
       {selected && <Inspector commit={selected} details={details} comparison={comparison} analyzing={analyzing} comparing={comparing} analysis={analysis} onAnalyze={analyze} onCompare={compareParent} />}
     </div>

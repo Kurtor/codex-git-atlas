@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { promisify } = require('node:util');
+const { attachBranchOperations } = require('./branch-operations.cjs');
 
 const execFileAsync = promisify(execFile);
 const isDev = !app.isPackaged;
@@ -57,7 +58,7 @@ function parseLog(raw) {
     const refs = parseRefs(refsRaw);
     const branch = refs.find((ref) => !ref.startsWith('tag:') && !ref.includes('origin/')) || '';
     const tags = refs.filter((ref) => ref.startsWith('tag:')).map((ref) => ref.replace(/^tag:\s*/, ''));
-    return { hash, shortHash, refs, subject, author, isoDate, parents: parentsRaw.split(' ').filter(Boolean), additions, deletions, modules, branch, branches: [], tags, lane: 0, color: COLORS[0] };
+    return { hash, shortHash, refs, subject, author, isoDate, parents: parentsRaw.split(' ').filter(Boolean), additions, deletions, modules, branch, branches: [], tags, operations: [], lane: 0, color: COLORS[0] };
   });
   return buildLanes(commits);
 }
@@ -98,6 +99,11 @@ async function validateRepo(repoPath) {
     return { full, short, hash, track, type: full.startsWith('refs/tags') ? 'tag' : full.startsWith('refs/remotes') ? 'remote' : 'local' };
   });
   await attachBranchMembership(root, commits, refs, branch);
+  let headReflog = '';
+  try {
+    headReflog = await git(root, ['reflog', 'show', 'HEAD', '--date=iso-strict', '--max-count=500', '--format=%H%x1f%gD%x1f%gs%x1f%cI']);
+  } catch { /* Reflog may be disabled, unavailable, or expired. Merge detection still works from commit structure. */ }
+  attachBranchOperations(commits, headReflog, branch);
   return { path: root, name, branch, ahead, behind, dirtyCount: Math.max(0, statusLines.length - 1), commits, refs };
 }
 
@@ -211,6 +217,10 @@ function createWindow() {
             branch: repo.branch,
             commitCount: repo.commits.length,
             refCount: repo.refs.length,
+            operationCounts: {
+              merge: repo.commits.filter((commit) => commit.operations.some((operation) => operation.kind === 'merge')).length,
+              rebase: repo.commits.filter((commit) => commit.operations.some((operation) => operation.kind === 'rebase')).length,
+            },
             hasRealHistory: repo.commits.length > 0,
           };
         } catch (error) {
@@ -223,6 +233,8 @@ function createWindow() {
           const expectedRepoName = ${JSON.stringify(nativeRepo.name || '')};
           const captureMode = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_MODE || 'history')};
           const captureBranch = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_BRANCH || '')};
+          const captureOperation = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_OPERATION || '')};
+          const expectedOperationCounts = ${JSON.stringify(nativeRepo.operationCounts || { merge: 0, rebase: 0 })};
           const result = {};
           const search = document.querySelector('.history-toolbar input');
           const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
@@ -278,9 +290,18 @@ function createWindow() {
           document.querySelectorAll('.mode-tabs button')[3]?.click(); await wait(80);
           result.riskQueue = document.querySelectorAll('.risk-queue button').length > 0 && [...document.querySelectorAll('.commit-row .risk-signal b')].every((node) => Number(node.textContent) >= 45);
           result.explainableRisk = document.querySelectorAll('.risk-factors span').length === 4 && document.body.innerText.includes('范围 0-100');
+          document.querySelectorAll('.mode-tabs button')[0]?.click(); await wait(80);
+          const mergeRows = document.querySelectorAll('.commit-row[data-operations~="merge"]');
+          const rebaseRows = document.querySelectorAll('.commit-row[data-operations~="rebase"]');
+          result.branchOperationMarkers = mergeRows.length === expectedOperationCounts.merge && rebaseRows.length === expectedOperationCounts.rebase && document.querySelectorAll('.operation-badge[data-operation]').length === expectedOperationCounts.merge + expectedOperationCounts.rebase;
+          const firstOperationRow = mergeRows[0] || rebaseRows[0]; firstOperationRow?.click(); await wait(80);
+          result.branchOperationDetails = expectedOperationCounts.merge + expectedOperationCounts.rebase === 0 || Boolean(document.querySelector('.branch-operations [data-operation-detail]'));
+          rebaseRows[0]?.click(); await wait(80);
+          result.rebaseEvidence = expectedOperationCounts.rebase === 0 || document.querySelector('.branch-operations')?.textContent.includes('reflog');
           const requestedIndex = Math.max(0, modeKeys.indexOf(captureMode));
           document.querySelectorAll('.mode-tabs button')[requestedIndex]?.click(); await wait(100);
           if (captureBranch) document.querySelector('.branch-list button[data-branch="' + CSS.escape(captureBranch) + '"]')?.click();
+          if (captureOperation) document.querySelector('.commit-row[data-operations~="' + CSS.escape(captureOperation) + '"]')?.click();
           await wait(120);
           return result;
         })()`);

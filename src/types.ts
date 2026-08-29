@@ -1,9 +1,14 @@
 export type RefItem = { full: string; short: string; hash: string; track: string; type: 'local' | 'remote' | 'tag' };
 
+export type BranchOperation = {
+  kind: 'merge' | 'rebase'; source: string; target: string;
+  evidence: 'commit-parents' | 'local-reflog'; parentCount?: number; recordedAt?: string;
+};
+
 export type GitCommit = {
   hash: string; shortHash: string; refs: string[]; subject: string; author: string; isoDate: string;
   parents: string[]; additions: number; deletions: number; modules: Record<string, number>;
-  branch: string; branches: string[]; tags: string[]; lane: number; color: string;
+  branch: string; branches: string[]; tags: string[]; operations: BranchOperation[]; lane: number; color: string;
 };
 
 export type RepositoryData = {

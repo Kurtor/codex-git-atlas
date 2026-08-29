@@ -57,9 +57,21 @@ export default function GraphCanvas({ commits, selectedHash, causalOnly, rowHeig
 
     commits.forEach((commit, index) => {
       const x = laneX(commit); const y = centers[index]; const isSelected = commit.hash === selectedHash; const isRelated = related.has(commit.hash);
+      const isMerge = commit.operations.some((operation) => operation.kind === 'merge');
+      const isRebase = commit.operations.some((operation) => operation.kind === 'rebase');
       context.globalAlpha = causalOnly && !isRelated ? .12 : 1;
       if (isSelected) { context.fillStyle = 'rgba(104,168,232,.15)'; context.beginPath(); context.arc(x, y, 12, 0, Math.PI * 2); context.fill(); context.strokeStyle = '#83bdf1'; context.lineWidth = 1; context.stroke() }
-      context.fillStyle = isSelected ? '#83bdf1' : commit.color; context.beginPath(); context.arc(x, y, isSelected ? 5.5 : 4, 0, Math.PI * 2); context.fill();
+      if (isMerge) {
+        context.save(); context.translate(x, y); context.rotate(Math.PI / 4);
+        context.fillStyle = '#0d1117'; context.strokeStyle = '#d4a855'; context.lineWidth = isSelected ? 2.2 : 1.7;
+        context.beginPath(); context.rect(-6.5, -6.5, 13, 13); context.fill(); context.stroke(); context.restore();
+      } else if (isRebase) {
+        context.strokeStyle = '#9b8ae7'; context.lineWidth = isSelected ? 2.2 : 1.6;
+        context.beginPath(); context.arc(x, y, 7.5, 0, Math.PI * 2); context.stroke();
+        context.setLineDash([2, 2]); context.beginPath(); context.arc(x, y, 10.5, -.85, 2.25); context.stroke(); context.setLineDash([]);
+      }
+      context.fillStyle = isSelected ? '#83bdf1' : isMerge ? '#d4a855' : isRebase ? '#9b8ae7' : commit.color;
+      context.beginPath(); context.arc(x, y, isSelected ? 5.5 : isMerge || isRebase ? 3.5 : 4, 0, Math.PI * 2); context.fill();
       context.strokeStyle = '#141718'; context.lineWidth = 1.5; context.stroke();
     });
     context.globalAlpha = 1;
