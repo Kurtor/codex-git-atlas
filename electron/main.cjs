@@ -219,7 +219,7 @@ function createWindow() {
         const codexContext = await getCodexProjectContext();
         const checks = await win.webContents.executeJavaScript(`(async () => {
           const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-          const expectedFollowLabel = ${JSON.stringify(`已跟随 · ${codexContext.projectName || ''}`)};
+          const expectedFollowLabel = ${JSON.stringify(`已跟随：${codexContext.projectName || ''}`)};
           const expectedRepoName = ${JSON.stringify(nativeRepo.name || '')};
           const captureMode = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_MODE || 'history')};
           const captureBranch = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_BRANCH || '')};
@@ -277,7 +277,7 @@ function createWindow() {
           document.querySelectorAll('.module-detail button')[0]?.click(); await wait(60);
           document.querySelectorAll('.mode-tabs button')[3]?.click(); await wait(80);
           result.riskQueue = document.querySelectorAll('.risk-queue button').length > 0 && [...document.querySelectorAll('.commit-row .risk-signal b')].every((node) => Number(node.textContent) >= 45);
-          result.explainableRisk = document.querySelectorAll('.risk-factors span').length === 4 && document.body.innerText.includes('范围 0–100');
+          result.explainableRisk = document.querySelectorAll('.risk-factors span').length === 4 && document.body.innerText.includes('范围 0-100');
           const requestedIndex = Math.max(0, modeKeys.indexOf(captureMode));
           document.querySelectorAll('.mode-tabs button')[requestedIndex]?.click(); await wait(100);
           if (captureBranch) document.querySelector('.branch-list button[data-branch="' + CSS.escape(captureBranch) + '"]')?.click();
