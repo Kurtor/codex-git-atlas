@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { promisify } = require('node:util');
 const { attachBranchOperations } = require('./branch-operations.cjs');
+const { executeGitAction, getWorkspaceStatus } = require('./git-actions.cjs');
 
 const execFileAsync = promisify(execFile);
 const isDev = !app.isPackaged;
@@ -286,6 +287,7 @@ function createWindow() {
           const captureBranch = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_BRANCH || '')};
           const captureOperation = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_OPERATION || '')};
           const captureRepositoryBrowser = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_BROWSER === '1')};
+          const captureGitDock = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_GIT === '1')};
           const expectedOperationCounts = ${JSON.stringify(nativeRepo.operationCounts || { merge: 0, rebase: 0 })};
           const expectedSearchTerm = ${JSON.stringify(nativeRepo.searchTerm || '')};
           const expectedCommitCount = ${JSON.stringify(nativeRepo.commitCount || 0)};
@@ -294,6 +296,14 @@ function createWindow() {
           repositoryToggle?.click(); await wait(180);
           result.integratedRepositoryBrowser = Boolean(document.querySelector('[data-repository-browser]')) && Boolean(document.querySelector('.repository-path input')) && Boolean(document.querySelector('.directory-list')) && document.body.innerText.includes('本机文件');
           document.querySelector('.repository-browser-header > button')?.click(); await wait(80);
+          const gitToggle = document.querySelector('.history-toolbar [data-git-command-toggle]');
+          gitToggle?.click(); await wait(220);
+          result.gitCommandDock = Boolean(document.querySelector('[data-git-command-dock]')) && document.body.innerText.includes('远端同步') && document.body.innerText.includes('工作区') && document.body.innerText.includes('提交说明');
+          document.querySelector('[data-git-action="push"]')?.click(); await wait(40);
+          result.gitCommandSafety = document.body.innerText.includes('仅允许快进') && document.body.innerText.includes('不会强推') && !document.querySelector('[data-git-command-dock] textarea');
+          result.gitWorkspaceStatus = Boolean(document.querySelector('.git-status-numbers')) && Boolean(document.querySelector('.git-command-branch span')?.textContent);
+          document.querySelector('.git-confirm button:last-child')?.click(); await wait(30);
+          gitToggle?.click(); await wait(80);
           const search = document.querySelector('.history-toolbar input');
           const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
           setter.call(search, expectedSearchTerm); search.dispatchEvent(new Event('input', { bubbles: true })); await wait(80);
@@ -361,6 +371,10 @@ function createWindow() {
           if (captureBranch) document.querySelector('.branch-list button[data-branch="' + CSS.escape(captureBranch) + '"]')?.click();
           if (captureOperation) document.querySelector('.commit-row[data-operations~="' + CSS.escape(captureOperation) + '"]')?.click();
           if (captureRepositoryBrowser && !document.querySelector('[data-repository-browser]')) document.querySelector('[data-repository-browser-toggle]')?.click();
+          if (captureGitDock && !document.querySelector('[data-git-command-dock]')) {
+            document.querySelector('.history-toolbar [data-git-command-toggle]')?.click(); await wait(120);
+            document.querySelector('[data-git-action="push"]')?.click();
+          }
           await wait(120);
           return result;
         })()`);
@@ -383,6 +397,8 @@ ipcMain.handle('repo:load', async (_event, repoPath) => { const data = await val
 ipcMain.handle('repo:last', () => readLastRepo());
 ipcMain.handle('repo:recent', () => readRecentRepos());
 ipcMain.handle('repo:browse', (_event, directoryPath) => browseDirectory(directoryPath));
+ipcMain.handle('git:status', (_event, repoPath) => getWorkspaceStatus(repoPath));
+ipcMain.handle('git:action', (_event, repoPath, action, payload) => executeGitAction(repoPath, action, payload));
 ipcMain.handle('codex:context', () => getCodexProjectContext());
 ipcMain.handle('follow:get', () => readFollowCodex());
 ipcMain.handle('follow:set', (_event, enabled) => saveFollowCodex(enabled));

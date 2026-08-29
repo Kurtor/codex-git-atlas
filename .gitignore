@@ -37,6 +37,7 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/artifacts/
 design/implementation-v*.png
 design/design-qa-comparison*.png
 design/*.png

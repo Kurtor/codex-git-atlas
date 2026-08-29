@@ -3,14 +3,15 @@ import {
   ArrowRight, ArrowsClockwise, BracketsCurly, CaretDown, ChartLineUp, CheckCircle,
   CirclesThreePlus, ClockCounterClockwise, Code, GitBranch, GitCommit as GitCommitIcon, GitFork,
   Folders, GitMerge, MagnifyingGlass, Minus, Path, Plus, Robot, SidebarSimple,
-  Tag, TreeStructure, Warning, X,
+  Tag, TerminalWindow, TreeStructure, Warning, X,
 } from '@phosphor-icons/react';
 import GraphCanvas, { graphHeight } from './GraphCanvas';
 import { collectRelations, commitRiskScore, riskLevel, type AppMode } from './analytics';
 import { demoRepository } from './demo';
 import { ModeWorkspace, ScopeDossier, modeCopy } from './ModeWorkspace';
+import GitCommandDock from './GitCommandDock';
 import RepositoryBrowser from './RepositoryBrowser';
-import type { CodexProjectContext, CommitDetails, DirectoryListing, GitCommit, ParentComparison, RecentRepository, RepositoryData } from './types';
+import type { CodexProjectContext, CommitDetails, DirectoryListing, GitAction, GitActionResult, GitCommit, GitWorkspaceStatus, ParentComparison, RecentRepository, RepositoryData } from './types';
 
 const ROW_HEIGHT = 43;
 const EXPANDED_HEIGHT = 180;
@@ -62,14 +63,14 @@ function ActivityOverview({ commits, selectedHash, onSelect }: { commits: GitCom
 function Sidebar({
   data, activeBranch, selectedHash, followCodex, followContext, repositoryBrowserOpen,
   directoryListing, recentRepositories, repositoryPathDraft, repositoryBrowserLoading, repositoryBrowserError,
-  onBranch, onSelect, onToggleRepositoryBrowser, onRepositoryPathDraft, onBrowseDirectory, onLoadRepository, onFollow,
+  onBranch, onSelect, onToggleRepositoryBrowser, onRepositoryPathDraft, onBrowseDirectory, onLoadRepository, onFollow, onGitOperations,
 }: {
   data: RepositoryData; activeBranch: string; selectedHash: string; followCodex: boolean; followContext: CodexProjectContext | null;
   repositoryBrowserOpen: boolean; directoryListing: DirectoryListing | null; recentRepositories: RecentRepository[];
   repositoryPathDraft: string; repositoryBrowserLoading: boolean; repositoryBrowserError: string;
   onBranch: (branch: string) => void; onSelect: (hash: string) => void; onToggleRepositoryBrowser: () => void;
   onRepositoryPathDraft: (value: string) => void; onBrowseDirectory: (path?: string) => void; onLoadRepository: (path: string) => void;
-  onFollow: (enabled: boolean) => void;
+  onFollow: (enabled: boolean) => void; onGitOperations: () => void;
 }) {
   const local = data.refs.filter((ref) => ref.type === 'local'); const tags = data.refs.filter((ref) => ref.type === 'tag');
   const followText = !followCodex ? '已固定当前仓库' : followContext?.status === 'ready' ? `已跟随：${followContext.projectName}` : followContext?.status === 'ambiguous' ? `${followContext.projectName} 含多个仓库` : followContext?.status === 'not-git' ? `${followContext.projectName} 不是 Git 仓库` : followContext?.status === 'unavailable' ? '等待 Codex 本地项目' : '正在读取 Codex 项目';
@@ -83,7 +84,7 @@ function Sidebar({
       </section>
       <section><div className="side-title"><span>标签</span><Tag /></div>{tags.slice(0, 4).map((ref) => <div className="tag-item" key={ref.full}><Tag /><span>{ref.short}</span><small>{ref.hash}</small></div>)}{!tags.length && <div className="empty-side">暂无标签</div>}</section>
       <ActivityOverview commits={data.commits} selectedHash={selectedHash} onSelect={onSelect} />
-      <footer><span><i /> {data.dirtyCount ? `${data.dirtyCount} 项未提交更改` : '工作区干净'}</span><button aria-label="收起侧栏"><SidebarSimple /></button></footer>
+      <footer><button type="button" className="workspace-status-button" data-git-command-toggle onClick={onGitOperations} title="打开 Git 快捷操作"><i />{data.dirtyCount ? `${data.dirtyCount} 项未提交更改` : '工作区干净'}</button><button aria-label="收起侧栏"><SidebarSimple /></button></footer>
     </>}
   </aside>;
 }
@@ -117,6 +118,9 @@ export default function App() {
   const [repositoryBrowserOpen, setRepositoryBrowserOpen] = useState(false); const [directoryListing, setDirectoryListing] = useState<DirectoryListing | null>(null);
   const [recentRepositories, setRecentRepositories] = useState<RecentRepository[]>([]); const [repositoryPathDraft, setRepositoryPathDraft] = useState('');
   const [repositoryBrowserLoading, setRepositoryBrowserLoading] = useState(false); const [repositoryBrowserError, setRepositoryBrowserError] = useState('');
+  const [gitCommandOpen, setGitCommandOpen] = useState(false); const [gitWorkspaceStatus, setGitWorkspaceStatus] = useState<GitWorkspaceStatus | null>(null);
+  const [gitStatusLoading, setGitStatusLoading] = useState(false); const [gitActionRunning, setGitActionRunning] = useState<GitAction | null>(null);
+  const [gitActionResult, setGitActionResult] = useState<GitActionResult | null>(null); const [gitActionError, setGitActionError] = useState('');
   const dataPathRef = useRef(data.path); const loadSequenceRef = useRef(0);
   const selected = data.commits.find((commit) => commit.hash === selectedHash) || data.commits[0];
   const rowHeight = density === 'compact' ? 36 : density === 'relaxed' ? 52 : ROW_HEIGHT; const expandedHeight = density === 'compact' ? 158 : density === 'relaxed' ? 216 : EXPANDED_HEIGHT;
@@ -149,6 +153,14 @@ export default function App() {
     finally { setRepositoryBrowserLoading(false) }
   }, []);
 
+  const refreshGitStatus = useCallback(async () => {
+    if (!window.gitAtlas) return;
+    setGitStatusLoading(true); setGitActionError('');
+    try { setGitWorkspaceStatus(await window.gitAtlas.getWorkspaceStatus(dataPathRef.current)) }
+    catch (cause) { setGitActionError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setGitStatusLoading(false) }
+  }, []);
+
   useEffect(() => { if (!window.gitAtlas) return; let cancelled = false; (async () => { const [enabled, recent] = await Promise.all([window.gitAtlas!.getFollowCodex(), window.gitAtlas!.getRecentRepositories()]); if (cancelled) return; setFollowCodex(enabled); setRecentRepositories(recent); if (!enabled) { const last = await window.gitAtlas!.getLastRepository(); if (!cancelled && last) await applyRepository(last) } })().catch(() => null); return () => { cancelled = true } }, [applyRepository]);
   useEffect(() => {
     if (!window.gitAtlas || !followCodex) { setFollowContext(null); return }
@@ -165,7 +177,20 @@ export default function App() {
   }, [applyRepository, followCodex]);
   useEffect(() => { if (!selected || isDemo || !window.gitAtlas) { setDetails(null); return } window.gitAtlas.getCommitDetails(data.path, selected.hash).then(setDetails).catch(() => setDetails(null)) }, [selected?.hash, data.path, isDemo]);
   useEffect(() => { if (visible.length && !visible.some((commit) => commit.hash === selectedHash)) setSelectedHash(visible[0].hash) }, [visible, selectedHash]);
-  useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); document.querySelector<HTMLInputElement>('.history-toolbar input')?.focus() } if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { const index = visible.findIndex((commit) => commit.hash === selectedHash); const next = event.key === 'ArrowDown' ? Math.min(visible.length - 1, index + 1) : Math.max(0, index - 1); if (visible[next]) setSelectedHash(visible[next].hash) } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey) }, [visible, selectedHash]);
+  useEffect(() => {
+    if (!gitCommandOpen) return;
+    setGitActionResult(null);
+    if (!window.gitAtlas || isDemo) { setGitWorkspaceStatus(null); setGitActionError('Git 快捷操作仅在桌面版的真实仓库中可用'); return }
+    void refreshGitStatus();
+  }, [gitCommandOpen, data.path, isDemo, refreshGitStatus]);
+  useEffect(() => { const onKey = (event: KeyboardEvent) => {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); if (isDemo) setError('请先从左侧仓库列表打开本地 Git 仓库'); else setGitCommandOpen((open) => !open); return }
+    if (event.key === 'Escape' && gitCommandOpen) { setGitCommandOpen(false); return }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); document.querySelector<HTMLInputElement>('.history-toolbar input')?.focus(); return }
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || target instanceof HTMLButtonElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { const index = visible.findIndex((commit) => commit.hash === selectedHash); const next = event.key === 'ArrowDown' ? Math.min(visible.length - 1, index + 1) : Math.max(0, index - 1); if (visible[next]) setSelectedHash(visible[next].hash) }
+  }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey) }, [visible, selectedHash, gitCommandOpen, isDemo]);
 
   const toggleRepositoryBrowser = () => {
     setRepositoryBrowserOpen((open) => {
@@ -182,17 +207,30 @@ export default function App() {
     if (await applyRepository(repoPath)) setRepositoryBrowserOpen(false);
   };
   const toggleFollowCodex = async (enabled: boolean) => { setFollowCodex(enabled); setFollowContext(enabled ? { status: 'checking', observedAt: Date.now() } : null); if (window.gitAtlas) await window.gitAtlas.setFollowCodex(enabled) };
+  const toggleGitCommand = () => { if (isDemo) { setError('请先从左侧仓库列表打开本地 Git 仓库'); return } setGitCommandOpen((open) => !open) };
+  const runGitAction = async (action: GitAction, payload?: { message?: string; branch?: string }) => {
+    if (!window.gitAtlas || isDemo) { setGitActionError('Git 快捷操作仅在桌面版的真实仓库中可用'); return }
+    setGitActionRunning(action); setGitActionResult(null); setGitActionError('');
+    try {
+      const result = await window.gitAtlas.runGitAction(dataPathRef.current, action, payload);
+      setGitActionResult(result);
+      await applyRepository(dataPathRef.current, { force: true });
+      await refreshGitStatus();
+    } catch (cause) { setGitActionError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setGitActionRunning(null) }
+  };
   const refreshRepository = async () => { if (isDemo) { if (!repositoryBrowserOpen) toggleRepositoryBrowser(); return } await applyRepository(data.path, { force: true }) };
   const analyze = async () => { if (!selected) return; if (!window.gitAtlas || isDemo) { setAnalysis('该提交重构了分支渲染管线，主要影响图谱布局、画布交互和颜色映射。建议重点验证大型仓库下的渲染性能、合并提交路径和缩放后的命中检测。'); return } setAnalyzing(true); setAnalysis(''); try { setAnalysis(await window.gitAtlas.analyzeWithCodex(data.path, selected.hash)) } catch (cause) { setAnalysis(`分析失败：${cause instanceof Error ? cause.message : String(cause)}`) } finally { setAnalyzing(false) } };
   const compareParent = async () => { if (!selected) return; if (!window.gitAtlas || isDemo) { setComparison({ parentHash: selected.parents[0] || null, additions: selected.additions, deletions: selected.deletions, files: Object.keys(selected.modules).map((file) => ({ file, additions: Math.round(selected.modules[file] * .72), deletions: Math.round(selected.modules[file] * .18) })) }); return } setComparing(true); try { setComparison(await window.gitAtlas.compareWithParent(data.path, selected.hash)) } catch (cause) { setError(`无法生成提交对比：${cause instanceof Error ? cause.message : String(cause)}`) } finally { setComparing(false) } };
 
   return <main className={`app ${repositoryBrowserOpen ? 'repository-browser-active' : ''}`}><div className="titlebar" />
     <nav className={`topbar active-mode-${mode}`}><div className="logo"><img src="./git-atlas-mark.png" alt="" /><span><strong>Git Atlas</strong><small>仓库情报工作台</small></span></div><div className="mode-tabs">{([['history', ClockCounterClockwise], ['causal', Path], ['modules', TreeStructure], ['risk', Warning]] as const).map(([value, Icon]) => <button key={value} aria-pressed={mode === value} className={mode === value ? 'active' : ''} onClick={() => switchMode(value)}><Icon /><span>{modeCopy[value].title}</span></button>)}</div><div className="density-control"><span>列表密度</span><div role="group" aria-label="列表密度">{([['compact','紧凑'],['standard','标准'],['relaxed','宽松']] as const).map(([value,label]) => <button key={value} aria-pressed={density === value} className={density === value ? 'active' : ''} onClick={() => setDensity(value)}>{label}</button>)}</div></div>{mode === 'causal' && <label className="causal-toggle"><input type="checkbox" checked={causalOnly} onChange={(event) => setCausalOnly(event.target.checked)} /><i />只看关联路径</label>}</nav>
-    <div className="layout"><Sidebar data={data} activeBranch={activeBranch} selectedHash={selectedHash} followCodex={followCodex} followContext={followContext} repositoryBrowserOpen={repositoryBrowserOpen} directoryListing={directoryListing} recentRepositories={recentRepositories} repositoryPathDraft={repositoryPathDraft} repositoryBrowserLoading={repositoryBrowserLoading} repositoryBrowserError={repositoryBrowserError} onBranch={setActiveBranch} onSelect={(hash) => { setSelectedHash(hash); setComparison(null) }} onToggleRepositoryBrowser={toggleRepositoryBrowser} onRepositoryPathDraft={setRepositoryPathDraft} onBrowseDirectory={browseDirectory} onLoadRepository={loadRepositoryFromBrowser} onFollow={toggleFollowCodex} />
-      <section className="history"><header className="history-toolbar"><div><strong>{data.name}</strong><span>{activeBranch === '全部' ? '全部分支' : activeBranch}，{visible.length} 个可见提交{isDemo && '，演示数据'}{followCodex && '，跟随 Codex'}</span></div><label><MagnifyingGlass /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提交、作者、哈希或引用" /><kbd>Ctrl K</kbd></label><button className={repositoryBrowserOpen ? 'active' : ''} onClick={toggleRepositoryBrowser}><Folders />仓库列表</button><button onClick={refreshRepository} aria-label="刷新"><ArrowsClockwise /></button></header>
+    <div className="layout"><Sidebar data={data} activeBranch={activeBranch} selectedHash={selectedHash} followCodex={followCodex} followContext={followContext} repositoryBrowserOpen={repositoryBrowserOpen} directoryListing={directoryListing} recentRepositories={recentRepositories} repositoryPathDraft={repositoryPathDraft} repositoryBrowserLoading={repositoryBrowserLoading} repositoryBrowserError={repositoryBrowserError} onBranch={setActiveBranch} onSelect={(hash) => { setSelectedHash(hash); setComparison(null) }} onToggleRepositoryBrowser={toggleRepositoryBrowser} onRepositoryPathDraft={setRepositoryPathDraft} onBrowseDirectory={browseDirectory} onLoadRepository={loadRepositoryFromBrowser} onFollow={toggleFollowCodex} onGitOperations={toggleGitCommand} />
+      <section className="history"><header className="history-toolbar"><div><strong>{data.name}</strong><span>{activeBranch === '全部' ? '全部分支' : activeBranch}，{visible.length} 个可见提交{isDemo && '，演示数据'}{followCodex && '，跟随 Codex'}</span></div><label><MagnifyingGlass /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提交、作者、哈希或引用" /><kbd>Ctrl K</kbd></label><button data-git-command-toggle className={gitCommandOpen ? 'active' : ''} onClick={toggleGitCommand}><TerminalWindow />Git 操作</button><button className={repositoryBrowserOpen ? 'active' : ''} onClick={toggleRepositoryBrowser}><Folders />仓库列表</button><button onClick={refreshRepository} aria-label="刷新"><ArrowsClockwise /></button></header>
         {error && <div className="toast"><Warning />{error}<button onClick={() => setError('')}><X /></button></div>}
         {loading && <div className="loading"><ArrowsClockwise /><span>{followCodex ? '正在跟随 Codex 切换仓库…' : '正在读取仓库历史…'}</span></div>}
         {selected && <ModeWorkspace mode={mode} data={data} commits={scoped} selected={selected} activeModule={activeModule} onModule={setActiveModule} onSelect={(hash) => { setSelectedHash(hash); setAnalysis(''); setComparison(null) }} />}
+        {gitCommandOpen && <GitCommandDock status={gitWorkspaceStatus} branches={data.refs.filter((ref) => ref.type === 'local').map((ref) => ref.short)} loading={gitStatusLoading} running={gitActionRunning} result={gitActionResult} error={gitActionError} onRefresh={refreshGitStatus} onRun={runGitAction} onClose={() => setGitCommandOpen(false)} />}
         <div className="history-scroll"><div className="column-head">{columnLabels.map((label) => <span key={label}>{label}</span>)}</div>
           <div className="commit-stack" style={{ height: graphHeight(visible, selectedHash, rowHeight, expandedHeight) }}><GraphCanvas commits={visible} selectedHash={selectedHash} causalOnly={causalOnly} rowHeight={rowHeight} expandedHeight={expandedHeight} />
             {visible.map((commit, index) => <div role="button" tabIndex={0} key={commit.hash} data-operations={commit.operations.map((operation) => operation.kind).join(' ') || undefined} className={`commit-row ${commit.hash === selectedHash ? 'selected' : ''} ${commit.operations.length ? 'has-operation' : ''}`} style={{ height: rowHeight, gridTemplateRows: `${rowHeight}px` }} onClick={() => { setSelectedHash(commit.hash); setAnalysis(''); setComparison(null) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedHash(commit.hash); setAnalysis(''); setComparison(null) } }}>

@@ -26,6 +26,19 @@ export type DirectoryListing = {
   path: string; parentPath: string | null; isRepository: boolean; entries: DirectoryEntry[];
 };
 
+export type GitAction = 'fetch' | 'pull' | 'push' | 'stage-all' | 'unstage-all' | 'commit' | 'switch-branch' | 'create-branch';
+
+export type GitWorkspaceFile = {
+  path: string; index: string; worktree: string; staged: boolean; unstaged: boolean; untracked: boolean;
+};
+
+export type GitWorkspaceStatus = {
+  branch: string; upstream: string; ahead: number; behind: number; clean: boolean;
+  totalFiles: number; staged: number; unstaged: number; untracked: number; files: GitWorkspaceFile[];
+};
+
+export type GitActionResult = { action: GitAction; command: string; summary: string; output: string };
+
 export type CommitDetails = {
   fullHash: string; shortHash: string; subject: string; author: string; email: string; isoDate: string;
   parents: string[]; files: { file: string; additions: number; deletions: number }[];
@@ -50,6 +63,8 @@ declare global {
       getLastRepository(): Promise<string | null>;
       getRecentRepositories(): Promise<RecentRepository[]>;
       browseDirectory(path?: string): Promise<DirectoryListing>;
+      getWorkspaceStatus(path: string): Promise<GitWorkspaceStatus>;
+      runGitAction(path: string, action: GitAction, payload?: { message?: string; branch?: string }): Promise<GitActionResult>;
       getCodexProjectContext(): Promise<CodexProjectContext>;
       getFollowCodex(): Promise<boolean>;
       setFollowCodex(enabled: boolean): Promise<boolean>;

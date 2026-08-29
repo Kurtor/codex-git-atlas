@@ -10,6 +10,7 @@
     "dev": "concurrently -k \"vite --host 0.0.0.0\" \"wait-on http://localhost:5173 && electron .\"",
     "dev:web": "vite --host 0.0.0.0",
     "test:operations": "node scripts/test-branch-operations.mjs",
+    "test:git-actions": "node scripts/test-git-actions.mjs",
     "typecheck": "tsc --noEmit",
     "build:web": "vite build",
     "build": "npm run typecheck && vite build && node scripts/build-portable.mjs",
