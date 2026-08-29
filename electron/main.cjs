@@ -57,9 +57,29 @@ function parseLog(raw) {
     const refs = parseRefs(refsRaw);
     const branch = refs.find((ref) => !ref.startsWith('tag:') && !ref.includes('origin/')) || '';
     const tags = refs.filter((ref) => ref.startsWith('tag:')).map((ref) => ref.replace(/^tag:\s*/, ''));
-    return { hash, shortHash, refs, subject, author, isoDate, parents: parentsRaw.split(' ').filter(Boolean), additions, deletions, modules, branch, tags, lane: 0, color: COLORS[0] };
+    return { hash, shortHash, refs, subject, author, isoDate, parents: parentsRaw.split(' ').filter(Boolean), additions, deletions, modules, branch, branches: [], tags, lane: 0, color: COLORS[0] };
   });
   return buildLanes(commits);
+}
+
+async function attachBranchMembership(root, commits, refs, currentBranch) {
+  const localBranches = refs.filter((ref) => ref.type === 'local').map((ref) => ref.short);
+  const prioritized = [...new Set([currentBranch, ...localBranches].filter((name) => name && name !== '分离头指针'))].slice(0, 16);
+  const byHash = new Map(commits.map((commit) => [commit.hash, commit]));
+  const queue = [...prioritized];
+  const workers = Array.from({ length: Math.min(3, queue.length) }, async () => {
+    while (queue.length) {
+      const branchName = queue.shift();
+      if (!branchName) return;
+      try {
+        const hashes = (await git(root, ['rev-list', '--max-count=500', branchName])).split(/\r?\n/).filter(Boolean);
+        hashes.forEach((hash) => { const commit = byHash.get(hash); if (commit) commit.branches.push(branchName) });
+      } catch { /* A branch may disappear while the repository is being refreshed. */ }
+    }
+  });
+  await Promise.all(workers);
+  commits.forEach((commit) => { commit.branches = [...new Set(commit.branches)] });
+  return commits;
 }
 
 async function validateRepo(repoPath) {
@@ -77,6 +97,7 @@ async function validateRepo(repoPath) {
     const [full, short, hash, track] = line.split('\t');
     return { full, short, hash, track, type: full.startsWith('refs/tags') ? 'tag' : full.startsWith('refs/remotes') ? 'remote' : 'local' };
   });
+  await attachBranchMembership(root, commits, refs, branch);
   return { path: root, name, branch, ahead, behind, dirtyCount: Math.max(0, statusLines.length - 1), commits, refs };
 }
 
@@ -209,8 +230,10 @@ function createWindow() {
           document.querySelectorAll('.mode-tabs button')[1].click(); await wait(80);
           result.causalMode = document.querySelectorAll('.mode-tabs button')[1].classList.contains('active') && document.querySelector('.causal-toggle input').checked;
           const initialRows = document.querySelectorAll('.commit-row');
+          const topologyBeforeSelection = document.querySelector('.graph-canvas')?.dataset.topologySignature;
           initialRows[Math.min(8, initialRows.length - 1)]?.click(); await wait(80);
           result.selection = initialRows[Math.min(8, initialRows.length - 1)]?.classList.contains('selected') === true;
+          result.stableTopology = topologyBeforeSelection === document.querySelector('.graph-canvas')?.dataset.topologySignature && document.querySelectorAll('.commit-row.selected').length === 1;
           result.denseRows = document.querySelectorAll('.commit-row').length === 16;
           result.chineseUi = document.body.innerText.includes('提交演化') && document.body.innerText.includes('用 Codex 分析');
           const densityButtons = document.querySelectorAll('.density-control button');
@@ -222,6 +245,10 @@ function createWindow() {
           if (follow && !follow.checked) follow.click(); await wait(2200);
           result.followControl = Boolean(follow?.checked) && document.body.innerText.includes('跟随 Codex');
           result.followLoadedRepo = document.body.innerText.includes(expectedFollowLabel) && document.body.innerText.includes(expectedRepoName) && !document.querySelector('.history-toolbar span')?.innerText.includes('演示数据');
+          const branchButton = [...document.querySelectorAll('.branch-list button[data-branch]')].find((button) => Number(button.dataset.commitCount) > 1);
+          branchButton?.click(); await wait(120);
+          result.branchReachability = Boolean(branchButton) && document.querySelectorAll('.commit-row').length === Number(branchButton?.dataset.commitCount) && Number(branchButton?.dataset.commitCount) > 1;
+          document.querySelector('.branch-list .branch-item')?.click(); await wait(80);
           if (follow?.checked) follow.click(); await wait(180);
           result.followDisableKeepsRepo = Boolean(follow && !follow.checked) && document.body.innerText.includes('已固定当前仓库') && document.body.innerText.includes(expectedRepoName);
           if (follow && !follow.checked) follow.click(); await wait(240);

@@ -3,7 +3,7 @@ export type RefItem = { full: string; short: string; hash: string; track: string
 export type GitCommit = {
   hash: string; shortHash: string; refs: string[]; subject: string; author: string; isoDate: string;
   parents: string[]; additions: number; deletions: number; modules: Record<string, number>;
-  branch: string; tags: string[]; lane: number; color: string;
+  branch: string; branches: string[]; tags: string[]; lane: number; color: string;
 };
 
 export type RepositoryData = {

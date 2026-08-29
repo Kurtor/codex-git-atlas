@@ -10,7 +10,11 @@ const commits: GitCommit[] = subjects.map((subject, index) => {
   const hash = `${['f3b8d1a','e9a7b56','c4d2f90','9b7f6c3','b1e4a22','a7c2e18','d6f3a91','7c9b3d0','3e2d9f7','2b7e6c1','8a1d2b4','f0c3b98','1a9b7e2','0d6e4f1','b4c5d6e','9f8e7d6'][index]}000000000000000000000000000000000`;
   const additions = [142,98,73,210,56,312,118,89,67,34,41,29,63,17,5,12][index];
   const deletions = [27,16,11,34,9,87,21,14,10,5,6,4,8,2,1,0][index];
-  return { hash, shortHash: hash.slice(0,7), refs: index === 0 ? ['HEAD -> main'] : index === 4 ? ['feature/causal-lens'] : [], subject, author: authors[index], isoDate: new Date(Date.now() - index * 9 * 3600_000).toISOString(), parents: index < subjects.length - 1 ? [`${['e9a7b56','c4d2f90','9b7f6c3','b1e4a22','a7c2e18','d6f3a91','7c9b3d0','3e2d9f7','2b7e6c1','8a1d2b4','f0c3b98','1a9b7e2','0d6e4f1','b4c5d6e','9f8e7d6',''][index]}000000000000000000000000000000000`] : [], additions, deletions, modules: { '渲染管线': additions, '画布交互': Math.round(additions*.42), '颜色映射': Math.round(additions*.27), '性能测试': Math.round(additions*.15) }, branch: branches[index], tags: index === 13 ? ['v1.2.0'] : [], lane, color: colors[lane] };
+  const memberships = ['main'];
+  if (index >= 4) memberships.push('feature/causal-lens');
+  if (index >= 6) memberships.push('feature/render-pipeline');
+  if (index >= 8) memberships.push('perf/benchmark');
+  return { hash, shortHash: hash.slice(0,7), refs: index === 0 ? ['HEAD -> main'] : index === 4 ? ['feature/causal-lens'] : [], subject, author: authors[index], isoDate: new Date(Date.now() - index * 9 * 3600_000).toISOString(), parents: index < subjects.length - 1 ? [`${['e9a7b56','c4d2f90','9b7f6c3','b1e4a22','a7c2e18','d6f3a91','7c9b3d0','3e2d9f7','2b7e6c1','8a1d2b4','f0c3b98','1a9b7e2','0d6e4f1','b4c5d6e','9f8e7d6',''][index]}000000000000000000000000000000000`] : [], additions, deletions, modules: { '渲染管线': additions, '画布交互': Math.round(additions*.42), '颜色映射': Math.round(additions*.27), '性能测试': Math.round(additions*.15) }, branch: branches[index], branches: memberships, tags: index === 13 ? ['v1.2.0'] : [], lane, color: colors[lane] };
 });
 
 commits[5].parents = [commits[6].hash, commits[7].hash];
