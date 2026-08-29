@@ -1,12 +1,14 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
 const isDev = !app.isPackaged;
 const COLORS = ['#59a8ff', '#a36aff', '#e1ac32', '#4fc1a2', '#ed6d66', '#7791ad', '#ce7bb6', '#8ea565'];
+let codexContextCache = { signature: '', expiresAt: 0, value: null };
 
 async function git(cwd, args, timeout = 30000) {
   const { stdout } = await execFileAsync('git', args, { cwd, timeout, maxBuffer: 40 * 1024 * 1024, windowsHide: true });
@@ -78,10 +80,84 @@ async function validateRepo(repoPath) {
 }
 
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); }
-function saveLastRepo(repoPath) { fs.writeFileSync(settingsPath(), JSON.stringify({ lastRepo: repoPath }), 'utf8'); }
-function readLastRepo() { try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')).lastRepo || null; } catch { return null; } }
+function readSettings() { try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')); } catch { return {}; } }
+function writeSettings(patch) { fs.writeFileSync(settingsPath(), JSON.stringify({ ...readSettings(), ...patch }, null, 2), 'utf8'); }
+function saveLastRepo(repoPath) { writeSettings({ lastRepo: repoPath }); }
+function readLastRepo() { return readSettings().lastRepo || null; }
+function saveFollowCodex(enabled) { writeSettings({ followCodex: Boolean(enabled) }); return Boolean(enabled); }
+function readFollowCodex() { return Boolean(readSettings().followCodex); }
+
+function normalizeLocalPath(value) {
+  if (typeof value !== 'string') return '';
+  const decoded = value.match(/^\/[A-Za-z]:\//) ? value.slice(1) : value;
+  return path.normalize(decoded);
+}
+
+function readCodexState() {
+  const explicit = process.env.GIT_ATLAS_CODEX_STATE;
+  const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+  const candidates = explicit
+    ? [explicit]
+    : [path.join(codexHome, '.codex-global-state.json'), path.join(codexHome, '.codex-global-state.json.bak')];
+  for (const candidate of candidates) {
+    try { return JSON.parse(fs.readFileSync(candidate, 'utf8')); } catch { /* Codex may be replacing the state file atomically. */ }
+  }
+  return null;
+}
+
+async function gitRoot(candidate) {
+  try { return (await git(candidate, ['rev-parse', '--show-toplevel'], 3500)).trim(); } catch { return null; }
+}
+
+async function directChildRepositories(rootPath) {
+  let entries;
+  try { entries = fs.readdirSync(rootPath, { withFileTypes: true }); } catch { return []; }
+  const directories = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith('.') && fs.existsSync(path.join(rootPath, entry.name, '.git'))).slice(0, 64);
+  const roots = await Promise.all(directories.map((entry) => gitRoot(path.join(rootPath, entry.name))));
+  return roots.filter(Boolean);
+}
+
+function cacheCodexContext(signature, value) {
+  codexContextCache = { signature, expiresAt: Date.now() + 30000, value };
+  return value;
+}
+
+async function getCodexProjectContext() {
+  const observedAt = Date.now();
+  const state = readCodexState();
+  if (!state) return { status: 'unavailable', observedAt, message: '未找到 Codex 本地项目状态' };
+
+  const selected = state['selected-project'];
+  const projects = state['local-projects'] || {};
+  const selectedProject = selected?.type === 'local' ? projects[selected.projectId] : null;
+  const roots = (selectedProject?.rootPaths?.length ? selectedProject.rootPaths : state['active-workspace-roots'] || [])
+    .map(normalizeLocalPath).filter(Boolean);
+  const projectName = selectedProject?.name || (roots[0] ? path.basename(roots[0]) : 'Codex 当前项目');
+  const base = {
+    projectId: selectedProject?.id || selected?.projectId || null,
+    projectName,
+    projectPath: roots[0] || null,
+    source: selectedProject ? 'selected-project' : 'active-workspace-roots',
+    observedAt,
+  };
+  const signature = JSON.stringify([base.projectId, base.projectName, roots]);
+  if (codexContextCache.signature === signature && codexContextCache.expiresAt > observedAt && codexContextCache.value) return { ...codexContextCache.value, observedAt };
+  if (!roots.length) return cacheCodexContext(signature, { ...base, status: 'unavailable', message: 'Codex 当前没有绑定本地文件夹' });
+
+  const discovered = [];
+  for (const rootPath of roots) {
+    const root = await gitRoot(rootPath);
+    if (root) discovered.push(root);
+    else discovered.push(...await directChildRepositories(rootPath));
+  }
+  const unique = [...new Map(discovered.map((repoPath) => [repoPath.toLowerCase(), repoPath])).values()];
+  if (unique.length === 1) return cacheCodexContext(signature, { ...base, status: 'ready', repoPath: unique[0], candidates: unique });
+  if (unique.length > 1) return cacheCodexContext(signature, { ...base, status: 'ambiguous', candidates: unique, message: `项目中检测到 ${unique.length} 个 Git 仓库` });
+  return cacheCodexContext(signature, { ...base, status: 'not-git', candidates: [], message: '当前 Codex 项目不是 Git 仓库' });
+}
 
 function createWindow() {
+  if (process.env.GIT_ATLAS_SMOKE) writeSettings({ lastRepo: null, followCodex: false });
   const rendererErrors = [];
   const win = new BrowserWindow({
     width: 1440, height: 1024, minWidth: 1080, minHeight: 680,
@@ -112,8 +188,11 @@ function createWindow() {
         } catch (error) {
           nativeRepo = { error: error instanceof Error ? error.message : String(error), hasRealHistory: false };
         }
+        const codexContext = await getCodexProjectContext();
         const checks = await win.webContents.executeJavaScript(`(async () => {
           const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const expectedFollowLabel = ${JSON.stringify(`已跟随 · ${codexContext.projectName || ''}`)};
+          const expectedRepoName = ${JSON.stringify(nativeRepo.name || '')};
           const result = {};
           const search = document.querySelector('.history-toolbar input');
           const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
@@ -122,15 +201,24 @@ function createWindow() {
           setter.call(search, ''); search.dispatchEvent(new Event('input', { bubbles: true })); await wait(80);
           document.querySelectorAll('.mode-tabs button')[1].click(); await wait(80);
           result.causalMode = document.querySelectorAll('.mode-tabs button')[1].classList.contains('active') && document.querySelector('.causal-toggle input').checked;
-          document.querySelectorAll('.commit-row')[8].click(); await wait(80);
-          result.selection = document.querySelectorAll('.commit-row')[8].classList.contains('selected');
+          const initialRows = document.querySelectorAll('.commit-row');
+          initialRows[Math.min(8, initialRows.length - 1)]?.click(); await wait(80);
+          result.selection = initialRows[Math.min(8, initialRows.length - 1)]?.classList.contains('selected') === true;
           result.denseRows = document.querySelectorAll('.commit-row').length === 16;
           result.chineseUi = document.body.innerText.includes('提交演化') && document.body.innerText.includes('用 Codex 分析');
+          const follow = document.querySelector('.follow-switch input');
+          if (follow && !follow.checked) follow.click(); await wait(2200);
+          result.followControl = Boolean(follow?.checked) && document.body.innerText.includes('跟随 Codex');
+          result.followLoadedRepo = document.body.innerText.includes(expectedFollowLabel) && document.body.innerText.includes(expectedRepoName) && !document.querySelector('.history-toolbar span')?.innerText.includes('演示数据');
+          if (follow?.checked) follow.click(); await wait(180);
+          result.followDisableKeepsRepo = Boolean(follow && !follow.checked) && document.body.innerText.includes('已固定当前仓库') && document.body.innerText.includes(expectedRepoName);
+          if (follow && !follow.checked) follow.click(); await wait(240);
           document.querySelectorAll('.mode-tabs button')[0].click(); await wait(80);
-          document.querySelectorAll('.commit-row')[5].click(); await wait(120);
+          const finalRows = document.querySelectorAll('.commit-row');
+          finalRows[Math.min(5, finalRows.length - 1)]?.click(); await wait(120);
           return result;
         })()`);
-        fs.writeFileSync(process.env.GIT_ATLAS_SMOKE, JSON.stringify({ nativeRepo, checks, rendererErrors }, null, 2));
+        fs.writeFileSync(process.env.GIT_ATLAS_SMOKE, JSON.stringify({ nativeRepo, codexContext, checks, rendererErrors }, null, 2));
       }
       const image = await win.capturePage();
       fs.writeFileSync(process.env.GIT_ATLAS_CAPTURE, image.resize({ width: 1440, height: 1024, quality: 'best' }).toPNG());
@@ -147,6 +235,9 @@ ipcMain.handle('repo:choose', async () => {
 });
 ipcMain.handle('repo:load', async (_event, repoPath) => { const data = await validateRepo(repoPath); saveLastRepo(data.path); return data; });
 ipcMain.handle('repo:last', () => readLastRepo());
+ipcMain.handle('codex:context', () => getCodexProjectContext());
+ipcMain.handle('follow:get', () => readFollowCodex());
+ipcMain.handle('follow:set', (_event, enabled) => saveFollowCodex(enabled));
 ipcMain.handle('commit:details', async (_event, repoPath, hash) => {
   const raw = await git(repoPath, ['show', '--no-renames', '--numstat', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%P%x1e', hash]);
   const [header, stats = ''] = raw.split('\x1e');

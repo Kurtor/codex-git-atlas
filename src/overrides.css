@@ -1,6 +1,36 @@
 .graph-canvas { z-index: 4; }
 .logo > img { width: 32px; height: 32px; object-fit: contain; }
 
+.follow-card {
+  height: 50px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: #0f1415;
+}
+.follow-card.enabled { background: linear-gradient(90deg, rgba(31, 104, 143, .14), #0f1415 68%); }
+.follow-card.attention { background: linear-gradient(90deg, rgba(175, 116, 30, .13), #0f1415 68%); }
+.follow-copy { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.follow-copy > svg { width: 16px; height: 16px; flex: none; color: #697476; }
+.follow-card.enabled .follow-copy > svg { color: #48bff1; filter: drop-shadow(0 0 5px rgba(72, 191, 241, .3)); }
+.follow-card.attention .follow-copy > svg { color: #d9a532; }
+.follow-copy > span { min-width: 0; display: grid; gap: 2px; }
+.follow-copy strong { font-size: 10px; font-weight: 600; color: #bfc8c7; }
+.follow-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; color: #687375; }
+.follow-card.enabled .follow-copy small { color: #5fa8c5; }
+.follow-card.attention .follow-copy small { color: #ae8746; }
+.follow-switch { position: relative; width: 28px; height: 16px; flex: none; cursor: pointer; }
+.follow-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.follow-switch i { position: absolute; inset: 0; border: 1px solid #445052; border-radius: 9px; background: #202627; transition: .16s ease; }
+.follow-switch i::after { content: ""; position: absolute; left: 2px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: #778183; transition: .16s ease; }
+.follow-switch input:checked + i { border-color: #328ec1; background: #173a4d; box-shadow: 0 0 10px rgba(51, 161, 218, .14); }
+.follow-switch input:checked + i::after { transform: translateX(12px); background: #57c7f2; box-shadow: 0 0 6px rgba(87, 199, 242, .5); }
+.follow-switch input:focus-visible + i { outline: 2px solid #49b9ef; outline-offset: 2px; }
+
 .branch-item { font-size: 11px; }
 .tag-item { font-size: 10px; }
 .column-head { font-size: 8px; }

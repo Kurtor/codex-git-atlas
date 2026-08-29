@@ -16,16 +16,24 @@ export type CommitDetails = {
   parents: string[]; files: { file: string; additions: number; deletions: number }[];
 };
 
+export type CodexProjectContext = {
+  status: 'checking' | 'ready' | 'unavailable' | 'not-git' | 'ambiguous';
+  projectId?: string | null; projectName?: string; projectPath?: string | null; repoPath?: string;
+  source?: 'selected-project' | 'active-workspace-roots'; candidates?: string[]; message?: string; observedAt: number;
+};
+
 declare global {
   interface Window {
     gitAtlas?: {
       chooseRepository(): Promise<RepositoryData | null>;
       loadRepository(path: string): Promise<RepositoryData>;
       getLastRepository(): Promise<string | null>;
+      getCodexProjectContext(): Promise<CodexProjectContext>;
+      getFollowCodex(): Promise<boolean>;
+      setFollowCodex(enabled: boolean): Promise<boolean>;
       getCommitDetails(path: string, hash: string): Promise<CommitDetails>;
       analyzeWithCodex(path: string, hash: string): Promise<string>;
       openExternal(target: string): Promise<void>;
     };
   }
 }
-
