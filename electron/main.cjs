@@ -281,6 +281,7 @@ function createWindow() {
           const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           const expectedFollowLabel = ${JSON.stringify(codexContext.status === 'ready' ? `已跟随：${codexContext.projectName || ''}` : codexContext.status === 'ambiguous' ? `${codexContext.projectName || ''} 含多个仓库` : codexContext.message || '')};
           const expectedRepoName = ${JSON.stringify(nativeRepo.name || '')};
+          const expectedFollowRepoName = ${JSON.stringify(codexContext.status === 'ready' && codexContext.repoPath ? path.basename(codexContext.repoPath) : nativeRepo.name || '')};
           const captureMode = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_MODE || 'history')};
           const captureBranch = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_BRANCH || '')};
           const captureOperation = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_OPERATION || '')};
@@ -315,13 +316,13 @@ function createWindow() {
           const follow = document.querySelector('.follow-switch input');
           if (follow && !follow.checked) follow.click(); await wait(2200);
           result.followControl = Boolean(follow?.checked) && document.body.innerText.includes('跟随 Codex');
-          result.followLoadedRepo = document.body.innerText.includes(expectedFollowLabel) && document.body.innerText.includes(expectedRepoName) && !document.querySelector('.history-toolbar span')?.innerText.includes('演示数据');
+          result.followLoadedRepo = document.body.innerText.includes(expectedFollowLabel) && document.body.innerText.includes(expectedFollowRepoName) && !document.querySelector('.history-toolbar span')?.innerText.includes('演示数据');
           const branchButton = [...document.querySelectorAll('.branch-list button[data-branch]')].find((button) => Number(button.dataset.commitCount) > 1);
           branchButton?.click(); await wait(120);
           result.branchReachability = Boolean(branchButton) && document.querySelectorAll('.commit-row').length === Number(branchButton?.dataset.commitCount) && Number(branchButton?.dataset.commitCount) > 1;
           document.querySelector('.branch-list .branch-item')?.click(); await wait(80);
           if (follow?.checked) follow.click(); await wait(180);
-          result.followDisableKeepsRepo = Boolean(follow && !follow.checked) && document.body.innerText.includes('已固定当前仓库') && document.body.innerText.includes(expectedRepoName);
+          result.followDisableKeepsRepo = Boolean(follow && !follow.checked) && document.body.innerText.includes('已固定当前仓库') && document.body.innerText.includes(expectedFollowRepoName);
           if (follow && !follow.checked) follow.click(); await wait(240);
           document.querySelectorAll('.mode-tabs button')[0].click(); await wait(80);
           const finalRows = document.querySelectorAll('.commit-row');
