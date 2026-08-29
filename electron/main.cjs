@@ -7,7 +7,7 @@ const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
 const isDev = !app.isPackaged;
-const COLORS = ['#59a8ff', '#a36aff', '#e1ac32', '#4fc1a2', '#ed6d66', '#7791ad', '#ce7bb6', '#8ea565'];
+const COLORS = ['#68a8e8', '#9b8ae7', '#d4a855', '#52ad9c', '#d87575', '#7d91a8', '#b982ad', '#87996d'];
 let codexContextCache = { signature: '', expiresAt: 0, value: null };
 let codexStateCache = { filePath: '', modifiedAt: -1, value: null };
 

@@ -1,9 +1,9 @@
 import type { GitCommit, RepositoryData } from './types';
 
-const colors = ['#9cff57', '#9466ff', '#3da8ff', '#35c6bb', '#e06f59'];
+const colors = ['#68a8e8', '#9b8ae7', '#d4a855', '#52ad9c', '#d87575'];
 const subjects = ['优化因果场布局算法','改进拓扑小图密度计算','语义缩放交互体验优化','模块热度带渲染重构','提交卡片对齐与可读性增强','重构分支渲染管线','画布交互命中检测优化','颜色映射策略抽象化','性能测试基准更新','修复缩放后连线偏移问题','因果路径过滤器实现','提交详情面板重构','风险评分算法 v2','文档：因果场说明更新','更新依赖项','初始化项目结构'];
 const branches = ['main','main','main','main','feature/causal-lens','main','feature/render-pipeline','feature/render-pipeline','perf/benchmark','feature/render-pipeline','feature/causal-lens','feature/causal-lens','feature/causal-lens','docs/readme-upd','chore/deps-bump','main'];
-const authors = ['林墨','林墨','林墨','林墨','陈澈','林墨','陈澈','苏言','苏言','陈澈','林墨','陈澈','苏言','林墨','陈澈','林墨'];
+const authors = ['演示作者 A','演示作者 A','演示作者 A','演示作者 A','演示作者 B','演示作者 A','演示作者 B','演示作者 C','演示作者 C','演示作者 B','演示作者 A','演示作者 B','演示作者 C','演示作者 A','演示作者 B','演示作者 A'];
 
 const commits: GitCommit[] = subjects.map((subject, index) => {
   const lane = branches[index] === 'main' ? 0 : branches[index].includes('causal') ? 1 : branches[index].includes('render') ? 2 : branches[index].includes('perf') ? 3 : 4;

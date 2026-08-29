@@ -22,17 +22,16 @@ const relativeTime = (iso: string) => {
   if (hours < 1) return '刚刚'; if (hours < 24) return `${hours}小时前`; const days = Math.floor(hours / 24); if (days < 7) return `${days}天前`; return new Date(iso).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
 };
 
-function ModuleHeat({ commit }: { commit: GitCommit }) {
-  const total = Math.max(1, Object.values(commit.modules).reduce((a, b) => a + b, 0));
-  const values = Object.values(commit.modules).slice(0, 8);
-  return <div className="module-heat" title="模块影响热度">{Array.from({ length: 8 }, (_, index) => {
-    const intensity = values[index % Math.max(1, values.length)] || 0; const alpha = .14 + Math.min(.86, intensity / total * 2.8);
-    return <i key={index} style={{ background: index % 3 === 1 ? `rgba(225,172,50,${alpha})` : `rgba(61,168,255,${alpha})` }} />;
-  })}</div>;
+function ModuleFootprint({ commit }: { commit: GitCommit }) {
+  const modules = Object.entries(commit.modules).sort((a, b) => b[1] - a[1]);
+  const total = Math.max(1, modules.reduce((sum, [, value]) => sum + value, 0));
+  const [primary = ['根目录', 0], secondary = ['', 0]] = modules;
+  const primaryShare = Math.round(primary[1] / total * 100); const secondaryShare = Math.round(secondary[1] / total * 100);
+  return <div className="module-footprint" title={modules.slice(0, 4).map(([name, value]) => `${name} ${Math.round(value / total * 100)}%`).join(' · ')}><span>{primary[0]}</span><div><i style={{ width: `${primaryShare}%` }} /><em style={{ width: `${secondaryShare}%` }} /></div><small>{primaryShare}%</small></div>;
 }
 
 function ModeSignal({ commit, mode, relation }: { commit: GitCommit; mode: AppMode; relation: string }) {
-  if (mode === 'history') return <ModuleHeat commit={commit} />;
+  if (mode === 'history') return <ModuleFootprint commit={commit} />;
   if (mode === 'causal') return <span className={`causal-signal ${relation}`}>{relation === 'focus' ? '当前焦点' : relation === 'ancestor' ? '上游祖先' : relation === 'descendant' ? '下游后继' : '路径之外'}</span>;
   if (mode === 'modules') { const module = Object.entries(commit.modules).sort((a, b) => b[1] - a[1])[0]; return <span className="module-signal"><b>{module?.[0] || '根目录'}</b><small>{compactNumber(module?.[1] || 0)}</small></span> }
   const score = commitRiskScore(commit); return <span className={`risk-signal ${riskLevel(score)}`}><b>{score}</b><small>{score >= 70 ? '高风险' : score >= 45 ? '中风险' : '低风险'}</small></span>;
@@ -61,7 +60,7 @@ function Sidebar({ data, activeBranch, selectedHash, followCodex, followContext,
     <div className={`follow-card ${followCodex ? 'enabled' : ''} ${followContext?.status === 'ambiguous' || followContext?.status === 'not-git' ? 'attention' : ''}`}><div className="follow-copy"><Robot weight={followCodex ? 'fill' : 'regular'} /><span><strong>跟随 Codex</strong><small>{followText}</small></span></div><label className="follow-switch" title={followCodex ? '关闭后固定当前仓库' : '开启后自动跟随 Codex 当前项目'}><input type="checkbox" checked={followCodex} onChange={(event) => onFollow(event.target.checked)} /><i /></label></div>
     <section><div className="side-label">当前分支</div><button className="branch-item current" onClick={() => onBranch(data.branch)}><GitBranch /><strong>{data.branch}</strong><span className="head-tag">HEAD</span><small>↑{data.ahead} ↓{data.behind}</small></button></section>
     <section className="branch-list"><div className="side-title"><span>所有分支</span><button aria-label="新建分支"><Plus /></button></div><button className={activeBranch === '全部' ? 'branch-item active' : 'branch-item'} onClick={() => onBranch('全部')}><CirclesThreePlus /><span>全部提交</span><small>{data.commits.length}</small></button>
-      {local.slice(0, 8).map((ref, index) => { const commitCount = data.commits.filter((commit) => commit.branches.includes(ref.short)).length; return <button key={ref.full} data-branch={ref.short} data-commit-count={commitCount} title={`${ref.short} · ${commitCount} 个可达提交${ref.track ? ` · ${ref.track}` : ''}`} className={activeBranch === ref.short ? 'branch-item active' : 'branch-item'} onClick={() => onBranch(ref.short)}><GitBranch style={{ color: ['#9cff57','#9466ff','#3da8ff','#35c6bb','#e06f59'][index % 5] }} /><span>{ref.short}</span>{ref.short === data.branch && <span className="head-tag">HEAD</span>}<small>{commitCount}</small></button> })}
+      {local.slice(0, 8).map((ref, index) => { const commitCount = data.commits.filter((commit) => commit.branches.includes(ref.short)).length; return <button key={ref.full} data-branch={ref.short} data-commit-count={commitCount} title={`${ref.short} · ${commitCount} 个可达提交${ref.track ? ` · ${ref.track}` : ''}`} className={activeBranch === ref.short ? 'branch-item active' : 'branch-item'} onClick={() => onBranch(ref.short)}><GitBranch style={{ color: ['#68a8e8','#9b8ae7','#d4a855','#52ad9c','#d87575'][index % 5] }} /><span>{ref.short}</span>{ref.short === data.branch && <span className="head-tag">HEAD</span>}<small>{commitCount}</small></button> })}
     </section>
     <section><div className="side-title"><span>标签</span><Tag /></div>{tags.slice(0, 4).map((ref) => <div className="tag-item" key={ref.full}><Tag /><span>{ref.short}</span><small>{ref.hash}</small></div>)}{!tags.length && <div className="empty-side">暂无标签</div>}</section>
     <ActivityOverview commits={data.commits} selectedHash={selectedHash} onSelect={onSelect} />
@@ -71,7 +70,7 @@ function Sidebar({ data, activeBranch, selectedHash, followCodex, followContext,
 
 function Inspector({ commit, details, comparison, analyzing, comparing, analysis, onAnalyze, onCompare }: { commit: GitCommit; details: CommitDetails | null; comparison: ParentComparison | null; analyzing: boolean; comparing: boolean; analysis: string; onAnalyze: () => void; onCompare: () => void }) {
   const modules = Object.entries(commit.modules).sort((a,b) => b[1] - a[1]).slice(0, 4); const max = modules[0]?.[1] || 1;
-  const risk = commit.deletions > 100 || commit.additions + commit.deletions > 700 ? '高风险' : commit.deletions > 30 ? '中等风险' : '低风险';
+  const score = commitRiskScore(commit); const level = riskLevel(score); const risk = level === 'high' ? '高风险' : level === 'medium' ? '中等风险' : '低风险'; const churn = commit.additions + commit.deletions; const deletionRatio = Math.round(commit.deletions / Math.max(1, churn) * 100);
   const changedFiles = comparison?.files || details?.files || [];
   return <aside className="inspector"><header><span>提交详情</span><button aria-label="关闭详情"><X /></button></header>
     <section className="commit-summary"><div className="hash-copy"><code>{commit.shortHash}</code><button onClick={() => navigator.clipboard.writeText(commit.hash)}>复制</button></div><h2>{commit.subject}</h2><p><span className="avatar">{commit.author.slice(0,1)}</span>{commit.author}<time>{new Date(commit.isoDate).toLocaleString('zh-CN')}</time></p></section>
@@ -79,8 +78,8 @@ function Inspector({ commit, details, comparison, analyzing, comparing, analysis
     <section><div className="section-title">受影响模块 ({modules.length})</div><div className="module-list">{modules.map(([name, value], index) => <div key={name}><span>{name}</span><i><b style={{ width: `${Math.max(12, value / max * 100)}%` }} /></i><strong>+{Math.round(value * .72)}</strong><em>−{Math.round(value * .18)}</em></div>)}</div></section>
     <section className="scope-stats"><div className="section-title">影响范围</div><div><span><Code /> <b>{details?.files.length ?? Object.keys(commit.modules).length * 6}</b><small>文件</small></span><span><Plus /> <b>{compactNumber(commit.additions)}</b><small>添加</small></span><span><Minus /> <b>{compactNumber(commit.deletions)}</b><small>删除</small></span></div></section>
     {changedFiles.length > 0 && <section className="changed-files"><div className="section-title">{comparison ? comparison.parentHash ? `与 ${comparison.parentHash.slice(0,7)} 对比` : '根提交变更' : '变更文件'} ({changedFiles.length})</div>{changedFiles.slice(0, comparison ? 10 : 4).map((file) => <div key={file.file} title={file.file}><code>{file.file}</code><strong>+{file.additions}</strong><em>−{file.deletions}</em></div>)}{!comparison && changedFiles.length > 4 && <small>生成对比可查看完整列表</small>}</section>}
-    <section><div className="section-title">风险评估 <span className={`risk ${risk === '高风险' ? 'high' : risk === '中等风险' ? 'medium' : ''}`}>{risk}</span></div><div className="risk-meter"><i /><b style={{ left: `${risk === '高风险' ? 84 : risk === '中等风险' ? 58 : 24}%` }} /></div><div className="risk-labels"><span>低</span><span>中</span><span>高</span></div></section>
-    <section><div className="section-title">父提交</div>{commit.parents.slice(0, 2).map((parent, index) => <div className="parent-row" key={parent}><i style={{ background: index ? '#9466ff' : '#9cff57' }} /><code>{parent.slice(0,7)}</code><span>{index ? '合并来源' : '直接父提交'}</span></div>)}</section>
+    <section className="risk-explain"><div className="section-title">风险评估 <span className={`risk ${level}`}>{score} · {risk}</span></div><div className="risk-meter"><i style={{ width: `${score}%` }} /><b style={{ left: `${score}%` }} /></div><div className="risk-factors"><span>变更规模 <b>{compactNumber(churn)}</b></span><span>删除比例 <b>{deletionRatio}%</b></span><span>模块跨度 <b>{Object.keys(commit.modules).length}</b></span><span>提交结构 <b>{commit.parents.length > 1 ? '合并' : '普通'}</b></span></div></section>
+    <section><div className="section-title">父提交</div>{commit.parents.slice(0, 2).map((parent, index) => <div className="parent-row" key={parent}><i style={{ background: index ? '#9b8ae7' : '#68a8e8' }} /><code>{parent.slice(0,7)}</code><span>{index ? '合并来源' : '直接父提交'}</span></div>)}</section>
     {analysis && <section className="analysis-result"><div className="section-title"><CheckCircle /> Codex 分析</div><p>{analysis}</p></section>}
     <div className="inspector-actions"><button className="codex-button" onClick={onAnalyze} disabled={analyzing}><Robot weight="fill" />{analyzing ? '正在分析…' : '用 Codex 分析'}</button><button onClick={onCompare} disabled={comparing}><GitMerge />{comparing ? '正在比较…' : comparison ? '已生成对比' : commit.parents.length ? '比较父提交' : '查看根提交变更'}</button></div>
   </aside>;
@@ -151,7 +150,7 @@ export default function App() {
             </div>)}
           </div>
           {visible.length > 0 && <ScopeDossier commits={visible} />}
-        </div><footer className="legend">{data.refs.filter((ref) => ref.type === 'local').slice(0,3).map((ref, index) => <span key={ref.full}><i style={{ background:['#9cff57','#9466ff','#3da8ff'][index] }} />{ref.short}</span>)}<span><GitMerge />合并提交</span><span><GitCommitIcon />分支点</span><span><b />当前 HEAD</span></footer>
+        </div><footer className="legend">{data.refs.filter((ref) => ref.type === 'local').slice(0,3).map((ref, index) => <span key={ref.full}><i style={{ background:['#68a8e8','#9b8ae7','#d4a855'][index] }} />{ref.short}</span>)}<span><GitMerge />合并提交</span><span><GitCommitIcon />分支点</span><span><b />当前 HEAD</span></footer>
       </section>
       {selected && <Inspector commit={selected} details={details} comparison={comparison} analyzing={analyzing} comparing={comparing} analysis={analysis} onAnalyze={analyze} onCompare={compareParent} />}
     </div>

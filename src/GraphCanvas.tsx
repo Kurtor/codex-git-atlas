@@ -33,11 +33,11 @@ export default function GraphCanvas({ commits, selectedHash, causalOnly, rowHeig
 
     if (selectedIndex >= 0) {
       const selectedX = laneX(commits[selectedIndex]);
-      const gradient = context.createRadialGradient(selectedX, selectedY, 3, selectedX, selectedY, 42);
-      gradient.addColorStop(0, 'rgba(73,194,255,.34)'); gradient.addColorStop(.46, 'rgba(51,108,178,.13)'); gradient.addColorStop(1, 'rgba(4,9,12,0)');
-      context.fillStyle = gradient; context.beginPath(); context.arc(selectedX, selectedY, 42, 0, Math.PI * 2); context.fill();
-      context.strokeStyle = 'rgba(125,212,255,.28)'; context.lineWidth = 1; context.beginPath(); context.arc(selectedX, selectedY, 21, 0, Math.PI * 2); context.stroke();
-      const beam = context.createLinearGradient(0, selectedY, width, selectedY); beam.addColorStop(0, 'rgba(75,190,255,0)'); beam.addColorStop(.47, 'rgba(152,225,255,.48)'); beam.addColorStop(.53, 'rgba(152,225,255,.48)'); beam.addColorStop(1, 'rgba(75,190,255,0)');
+      const gradient = context.createRadialGradient(selectedX, selectedY, 3, selectedX, selectedY, 30);
+      gradient.addColorStop(0, 'rgba(104,168,232,.24)'); gradient.addColorStop(.52, 'rgba(104,168,232,.08)'); gradient.addColorStop(1, 'rgba(4,9,12,0)');
+      context.fillStyle = gradient; context.beginPath(); context.arc(selectedX, selectedY, 30, 0, Math.PI * 2); context.fill();
+      context.strokeStyle = 'rgba(128,190,242,.38)'; context.lineWidth = 1; context.beginPath(); context.arc(selectedX, selectedY, 15, 0, Math.PI * 2); context.stroke();
+      const beam = context.createLinearGradient(0, selectedY, width, selectedY); beam.addColorStop(0, 'rgba(104,168,232,0)'); beam.addColorStop(.47, 'rgba(128,190,242,.24)'); beam.addColorStop(.53, 'rgba(128,190,242,.24)'); beam.addColorStop(1, 'rgba(104,168,232,0)');
       context.fillStyle = beam; context.fillRect(0, selectedY - .5, width, 1);
     }
 
@@ -47,10 +47,10 @@ export default function GraphCanvas({ commits, selectedHash, causalOnly, rowHeig
       parents.forEach((parentHash, parentOffset) => {
         const parentIndex = indexByHash.get(parentHash) ?? Math.min(index + 1, commits.length - 1); if (parentIndex === index) return;
         const parent = commits[parentIndex]; const endX = laneX(parent) + parentOffset * 10; const endY = centers[parentIndex];
-        const isRelated = related.has(commit.hash) || related.has(parentHash); context.globalAlpha = causalOnly && !isRelated ? .08 : .76;
+        const isRelated = related.has(commit.hash) || related.has(parentHash); context.globalAlpha = causalOnly && !isRelated ? .06 : .64;
         const pathColor = parentOffset > 0 ? parent.color : commit.color;
-        context.strokeStyle = pathColor; context.lineWidth = commit.hash === selectedHash || parentHash === selectedHash ? 2.6 : 1.45;
-        context.shadowColor = pathColor; context.shadowBlur = commit.hash === selectedHash || parentHash === selectedHash ? 18 : 0;
+        context.strokeStyle = pathColor; context.lineWidth = commit.hash === selectedHash || parentHash === selectedHash ? 2.15 : 1.3;
+        context.shadowColor = pathColor; context.shadowBlur = commit.hash === selectedHash || parentHash === selectedHash ? 8 : 0;
         context.beginPath(); context.moveTo(startX, startY); const bend = Math.max(22, Math.abs(endY - startY) * .42); context.bezierCurveTo(startX, startY + bend, endX, endY - bend, endX, endY); context.stroke(); context.shadowBlur = 0;
       });
     }
@@ -58,8 +58,8 @@ export default function GraphCanvas({ commits, selectedHash, causalOnly, rowHeig
     commits.forEach((commit, index) => {
       const x = laneX(commit); const y = centers[index]; const isSelected = commit.hash === selectedHash; const isRelated = related.has(commit.hash);
       context.globalAlpha = causalOnly && !isRelated ? .12 : 1;
-      if (isSelected) { context.fillStyle = 'rgba(70,184,255,.20)'; context.beginPath(); context.arc(x, y, 16, 0, Math.PI * 2); context.fill(); context.strokeStyle = '#6dcfff'; context.lineWidth = 1; context.stroke(); context.strokeStyle = 'rgba(120,215,255,.25)'; context.beginPath(); context.arc(x, y, 23, 0, Math.PI * 2); context.stroke() }
-      context.fillStyle = isSelected ? '#55c8ff' : commit.color; context.beginPath(); context.arc(x, y, isSelected ? 6 : 4.2, 0, Math.PI * 2); context.fill();
+      if (isSelected) { context.fillStyle = 'rgba(104,168,232,.15)'; context.beginPath(); context.arc(x, y, 12, 0, Math.PI * 2); context.fill(); context.strokeStyle = '#83bdf1'; context.lineWidth = 1; context.stroke() }
+      context.fillStyle = isSelected ? '#83bdf1' : commit.color; context.beginPath(); context.arc(x, y, isSelected ? 5.5 : 4, 0, Math.PI * 2); context.fill();
       context.strokeStyle = '#141718'; context.lineWidth = 1.5; context.stroke();
     });
     context.globalAlpha = 1;
