@@ -18,13 +18,13 @@
 
 <p align="center">
   <a href="https://github.com/Kurtor/codex-git-atlas/releases/latest"><strong>下载 Windows 便携版</strong></a>
-  · <a href="#30-秒开始">30 秒开始</a>
-  · <a href="#界面怎么读">界面怎么读</a>
+  &nbsp;&nbsp;|&nbsp;&nbsp; <a href="#30-秒开始">30 秒开始</a>
+  &nbsp;&nbsp;|&nbsp;&nbsp; <a href="#界面怎么读">界面怎么读</a>
 </p>
 
-![Git Atlas 的模块影响工作区正在分析 RAGflow 项目](docs/assets/git-atlas-ragflow.png)
+![Git Atlas 使用自身仓库展示模块影响工作区](docs/assets/git-atlas-workbench.png)
 
-<p align="center"><sub>真实 RAGflow 仓库 · 模块影响模式 · 跟随 Codex 开启</sub></p>
+<p align="center"><sub>Git Atlas 自身仓库，模块影响模式，跟随 Codex 已开启</sub></p>
 
 ## 为什么需要 Git Atlas
 
@@ -68,11 +68,11 @@ Git Atlas 把这些问题拆成四个真正不同的工作模式，同时保留�
 
 ### 风险路径
 
-根据变更规模、删除比例、合并结构和模块跨度生成 0–100 风险评分。风险队列列出优先检查项，主列表只保留中高风险提交；详情面板同时展示四个评分因子，列表、队列与详情使用同一套规则。
+根据变更规模、删除比例、合并结构和模块跨度生成 0-100 风险评分。风险队列列出优先检查项，主列表只保留中高风险提交；详情面板同时展示四个评分因子，列表、队列与详情使用同一套规则。
 
 ![Git Atlas 的四种分析模式](docs/assets/git-atlas-four-modes.png)
 
-<p align="center"><sub>左上：单分支提交演化 · 右上：因果场 · 左下：模块影响 · 右下：风险路径</sub></p>
+<p align="center"><sub>左上为提交演化，右上为因果场，左下为模块影响，右下为风险路径。</sub></p>
 
 ### 列表密度
 
@@ -103,7 +103,7 @@ Git Atlas 是 Electron 桌面应用，但持续工作保持克制：
 - Codex 状态文件按修改时间缓存，无变化时不重复解析，也不触发 React 重绘。
 - 跟随检查间隔为 3 秒，仓库路径变化时才重新读取 Git 历史。
 
-v1.4.0 在 Windows x64、16 逻辑处理器、RAGflow 仓库下的便携版实测：5 个进程合计可见空闲工作集约 373.8 MB、私有内存约 294.2 MB、整机 CPU 约 0.06%。本次视觉重构没有增加 UI 框架、字体包或动画库，前端产物约为 282 KB JavaScript（gzip 85 KB）与 53 KB CSS（gzip 11.7 KB）。不同仓库规模与系统环境下会有差异，Electron 基线内存也不应被包装成“原生级轻量”。
+v1.4.0 在 Windows x64、16 逻辑处理器和真实本地仓库下的便携版实测：5 个进程合计可见空闲工作集约 373.8 MB、私有内存约 294.2 MB、整机 CPU 约 0.06%。本次视觉重构没有增加 UI 框架、字体包或动画库，前端产物约为 282 KB JavaScript（gzip 85 KB）与 53 KB CSS（gzip 11.7 KB）。不同仓库规模与系统环境下会有差异，Electron 基线内存也不应被包装成“原生级轻量”。
 
 ## 隐私与安全
 
