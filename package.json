@@ -1,6 +1,6 @@
 {
   "name": "codex-git-atlas",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "private": true,
   "author": "Kurtor",
   "description": "面向 Codex 的本地可视化 Git 历史分析器",
