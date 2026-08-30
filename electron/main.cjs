@@ -6,6 +6,7 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 const { attachBranchOperations } = require('./branch-operations.cjs');
 const { executeGitAction, getWorkspaceStatus } = require('./git-actions.cjs');
+const { loadCodexEvidence, stopCodexEvidence } = require('./codex-evidence.cjs');
 
 const execFileAsync = promisify(execFile);
 const isDev = !app.isPackaged;
@@ -130,6 +131,8 @@ function readRecentRepos() {
 }
 function saveFollowCodex(enabled) { writeSettings({ followCodex: Boolean(enabled) }); return Boolean(enabled); }
 function readFollowCodex() { return Boolean(readSettings().followCodex); }
+function saveCodexEvidenceEnabled(enabled) { writeSettings({ codexEvidenceEnabled: Boolean(enabled) }); return Boolean(enabled); }
+function readCodexEvidenceEnabled() { return Boolean(readSettings().codexEvidenceEnabled); }
 
 function normalizeLocalPath(value) {
   if (typeof value !== 'string') return '';
@@ -410,6 +413,14 @@ ipcMain.handle('repo:browse', (_event, directoryPath) => browseDirectory(directo
 ipcMain.handle('git:status', (_event, repoPath) => getWorkspaceStatus(repoPath));
 ipcMain.handle('git:action', (_event, repoPath, action, payload) => executeGitAction(repoPath, action, payload));
 ipcMain.handle('codex:context', () => getCodexProjectContext());
+ipcMain.handle('codex:evidence-enabled', () => readCodexEvidenceEnabled());
+ipcMain.handle('codex:evidence-set-enabled', (_event, enabled) => saveCodexEvidenceEnabled(enabled));
+ipcMain.handle('codex:evidence-load', async (_event, repoPath, threadId) => {
+  if (!readCodexEvidenceEnabled()) return { status: 'disabled', tasks: [], selectedTask: null, observedAt: Date.now(), message: 'AI 证据读取已关闭' };
+  const repository = await gitRoot(repoPath);
+  if (!repository) throw new Error('请选择有效的 Git 仓库');
+  return loadCodexEvidence(repository, typeof threadId === 'string' ? threadId : undefined);
+});
 ipcMain.handle('follow:get', () => readFollowCodex());
 ipcMain.handle('follow:set', (_event, enabled) => saveFollowCodex(enabled));
 ipcMain.handle('commit:details', async (_event, repoPath, hash) => {
@@ -442,6 +453,8 @@ ipcMain.handle('codex:analyze', async (_event, repoPath, hash) => {
   return (stdout || stderr).trim();
 });
 ipcMain.handle('external:open', (_event, target) => shell.openExternal(target));
+
+app.on('before-quit', () => stopCodexEvidence());
 
 app.whenReady().then(() => { createWindow(); app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() }) });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() });

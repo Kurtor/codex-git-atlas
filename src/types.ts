@@ -55,6 +55,27 @@ export type CodexProjectContext = {
   source?: 'selected-project' | 'active-workspace-roots'; candidates?: string[]; message?: string; observedAt: number;
 };
 
+export type EvidenceSource = 'git-evidence' | 'codex-event' | 'automatic-association' | 'ai-inference';
+export type CodexEvidenceAction = {
+  id: string; type: 'command' | 'file-change' | 'tool'; label: string; status: string; source: EvidenceSource;
+  exitCode?: number | null; durationMs?: number | null; readOnly?: boolean | null; passed?: boolean;
+};
+export type CodexEvidenceFile = { path: string; kind: string; source: EvidenceSource };
+export type CodexEvidenceTurn = {
+  id: string; goal: string; status: string; startedAt: number | null; completedAt: number | null; durationMs: number | null;
+  actions: CodexEvidenceAction[]; files: CodexEvidenceFile[]; validations: (CodexEvidenceAction & { passed: boolean })[]; outcome: string;
+};
+export type VerificationDebt = { id: string; severity: 'high' | 'medium' | 'clear'; title: string; detail: string; source: EvidenceSource };
+export type CodexEvidenceTask = {
+  id: string; title: string; preview: string; status: string; createdAt: number; updatedAt: number; cwd: string;
+  branch: string | null; sha: string | null; match: 'repository' | 'repository-child' | 'workspace-parent' | null; source: EvidenceSource;
+  turns: CodexEvidenceTurn[]; files: string[]; verificationDebt: VerificationDebt[];
+};
+export type CodexEvidence = {
+  status: 'disabled' | 'empty' | 'ready' | 'unavailable'; tasks: CodexEvidenceTask[]; selectedTask: CodexEvidenceTask | null;
+  observedAt: number; message?: string | null;
+};
+
 declare global {
   interface Window {
     gitAtlas?: {
@@ -66,6 +87,9 @@ declare global {
       getWorkspaceStatus(path: string): Promise<GitWorkspaceStatus>;
       runGitAction(path: string, action: GitAction, payload?: { message?: string; branch?: string }): Promise<GitActionResult>;
       getCodexProjectContext(): Promise<CodexProjectContext>;
+      getCodexEvidenceEnabled(): Promise<boolean>;
+      setCodexEvidenceEnabled(enabled: boolean): Promise<boolean>;
+      loadCodexEvidence(path: string, threadId?: string): Promise<CodexEvidence>;
       getFollowCodex(): Promise<boolean>;
       setFollowCodex(enabled: boolean): Promise<boolean>;
       getCommitDetails(path: string, hash: string): Promise<CommitDetails>;
