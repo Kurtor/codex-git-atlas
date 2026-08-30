@@ -14,7 +14,7 @@ const normalized = normalizeThread({
   turns: [{
     id: 'turn-1', status: 'completed', startedAt: 1, completedAt: 2, durationMs: 1000,
     items: [
-      { type: 'userMessage', content: [{ type: 'text', text: '增加验证债务', text_elements: [] }] },
+      { type: 'userMessage', content: [{ type: 'text', text: '# Response annotations:\n<response-annotations>internal</response-annotations>\n## My request:\n增加验证债务', text_elements: [] }] },
       { type: 'reasoning', summary: ['不可显示'], content: ['不可显示'] },
       { type: 'fileChange', id: 'file', status: 'completed', changes: [{ path: `${repository}${process.platform === 'win32' ? '\\src\\App.tsx' : '/src/App.tsx'}`, kind: 'update', diff: 'secret diff' }] },
       { type: 'commandExecution', id: 'cmd', command: 'npm run test', cwd: repository, status: 'completed', exitCode: 0, durationMs: 20 },

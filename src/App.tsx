@@ -11,7 +11,8 @@ import { demoRepository } from './demo';
 import { ModeWorkspace, ScopeDossier, modeCopy } from './ModeWorkspace';
 import GitCommandDock from './GitCommandDock';
 import RepositoryBrowser from './RepositoryBrowser';
-import type { CodexProjectContext, CommitDetails, DirectoryListing, GitAction, GitActionResult, GitCommit, GitWorkspaceStatus, ParentComparison, RecentRepository, RepositoryData } from './types';
+import AiWorkspace, { aiModeCopy, type AiMode } from './AiWorkspace';
+import type { CodexEvidence, CodexProjectContext, CommitDetails, DirectoryListing, GitAction, GitActionResult, GitCommit, GitWorkspaceStatus, ParentComparison, RecentRepository, RepositoryData } from './types';
 
 const ROW_HEIGHT = 43;
 const EXPANDED_HEIGHT = 180;
@@ -122,6 +123,8 @@ export default function App() {
   const [gitCommandOpen, setGitCommandOpen] = useState(false); const [gitWorkspaceStatus, setGitWorkspaceStatus] = useState<GitWorkspaceStatus | null>(null);
   const [gitStatusLoading, setGitStatusLoading] = useState(false); const [gitActionRunning, setGitActionRunning] = useState<GitAction | null>(null);
   const [gitActionResult, setGitActionResult] = useState<GitActionResult | null>(null); const [gitActionError, setGitActionError] = useState('');
+  const [workspace, setWorkspace] = useState<'ai' | 'git'>('ai'); const [aiMode, setAiMode] = useState<AiMode>('tasks');
+  const [codexEvidenceEnabled, setCodexEvidenceEnabled] = useState(false); const [codexEvidence, setCodexEvidence] = useState<CodexEvidence | null>(null); const [codexEvidenceLoading, setCodexEvidenceLoading] = useState(false);
   const dataPathRef = useRef(data.path); const loadSequenceRef = useRef(0);
   const selected = data.commits.find((commit) => commit.hash === selectedHash) || data.commits[0];
   const rowHeight = density === 'compact' ? 36 : density === 'relaxed' ? 50 : ROW_HEIGHT; const expandedHeight = density === 'compact' ? 158 : density === 'relaxed' ? 210 : EXPANDED_HEIGHT;
@@ -162,7 +165,17 @@ export default function App() {
     finally { setGitStatusLoading(false) }
   }, []);
 
+  const loadCodexEvidence = useCallback(async (threadId?: string) => {
+    if (!window.gitAtlas || !dataPathRef.current || dataPathRef.current === demoRepository.path) return;
+    setCodexEvidenceLoading(true);
+    try { setCodexEvidence(await window.gitAtlas.loadCodexEvidence(dataPathRef.current, threadId)) }
+    catch (cause) { setCodexEvidence({ status: 'unavailable', tasks: [], selectedTask: null, observedAt: Date.now(), message: cause instanceof Error ? cause.message : String(cause) }) }
+    finally { setCodexEvidenceLoading(false) }
+  }, []);
+
   useEffect(() => { if (!window.gitAtlas) return; let cancelled = false; (async () => { const [enabled, recent] = await Promise.all([window.gitAtlas!.getFollowCodex(), window.gitAtlas!.getRecentRepositories()]); if (cancelled) return; setFollowCodex(enabled); setRecentRepositories(recent); if (!enabled) { const last = await window.gitAtlas!.getLastRepository(); if (!cancelled && last) await applyRepository(last) } })().catch(() => null); return () => { cancelled = true } }, [applyRepository]);
+  useEffect(() => { if (!window.gitAtlas) return; let cancelled = false; window.gitAtlas.getCodexEvidenceEnabled().then((enabled) => { if (!cancelled) setCodexEvidenceEnabled(enabled) }).catch(() => null); return () => { cancelled = true } }, []);
+  useEffect(() => { if (codexEvidenceEnabled && !isDemo) void loadCodexEvidence() }, [codexEvidenceEnabled, isDemo, data.path, loadCodexEvidence]);
   useEffect(() => {
     if (!window.gitAtlas || !followCodex) { setFollowContext(null); return }
     let cancelled = false; let running = false;
@@ -211,6 +224,7 @@ export default function App() {
     if (await applyRepository(repoPath)) { setRepositoryBrowserOpen(false); setNavigationOpen(false) }
   };
   const toggleFollowCodex = async (enabled: boolean) => { setFollowCodex(enabled); setFollowContext(enabled ? { status: 'checking', observedAt: Date.now() } : null); if (window.gitAtlas) await window.gitAtlas.setFollowCodex(enabled) };
+  const toggleCodexEvidence = async (enabled: boolean) => { setCodexEvidenceEnabled(enabled); if (!enabled) setCodexEvidence(null); if (window.gitAtlas) await window.gitAtlas.setCodexEvidenceEnabled(enabled) };
   const toggleGitCommand = () => { if (isDemo) { setError('请先从仓库导航打开本地 Git 仓库'); return } setGitCommandOpen((open) => !open) };
   const runGitAction = async (action: GitAction, payload?: { message?: string; branch?: string }) => {
     if (!window.gitAtlas || isDemo) { setGitActionError('Git 快捷操作仅在桌面版的真实仓库中可用'); return }
@@ -229,7 +243,7 @@ export default function App() {
   const selectCommit = (hash: string) => { setSelectedHash(hash); setAnalysis(''); setComparison(null); setInspectorOpen(true) };
   const followLabel = !followCodex ? 'Codex 跟随关闭' : followContext?.status === 'ready' ? 'Codex 已连接' : followContext?.status === 'checking' ? '正在连接 Codex' : '等待 Codex 项目';
 
-  return <main className={`app active-mode-${mode} ${navigationOpen ? 'navigation-open' : ''} ${inspectorOpen ? 'inspector-open' : ''}`} data-mode={mode}>
+  return <main className={`app active-mode-${mode} workspace-${workspace} ${navigationOpen ? 'navigation-open' : ''} ${inspectorOpen ? 'inspector-open' : ''}`} data-mode={mode}>
     <div className="titlebar" />
     <header className="shellbar">
       <div className="logo"><img src="./git-atlas-mark.png" alt="" /><span><strong>Git Atlas</strong><small>本地 Git 智能工作台</small></span></div>
@@ -242,20 +256,20 @@ export default function App() {
       <button type="button" className="icon-button" onClick={refreshRepository} aria-label="刷新仓库" title="刷新仓库"><ArrowsClockwise /></button>
     </header>
 
-    <nav className="mode-tabs" aria-label="分析模式">
-      {(Object.keys(modeCopy) as AppMode[]).map((value, index) => {
-        const copy = modeCopy[value]; const Icon = copy.Icon;
-        return <button type="button" key={value} data-mode={value} aria-pressed={mode === value} className={mode === value ? 'active' : ''} onClick={() => switchMode(value)}><em>0{index + 1}</em><Icon weight={mode === value ? 'duotone' : 'regular'} /><span><strong>{copy.title}</strong><small>{copy.short}</small></span></button>;
+    <nav className="mode-tabs ai-primary-tabs" aria-label="AI 代码演化工作模式">
+      {(Object.keys(aiModeCopy) as AiMode[]).map((value, index) => {
+        const copy = aiModeCopy[value]; const Icon = value === 'tasks' ? Robot : value === 'code' ? Code : value === 'handoff' ? CirclesThreePlus : Warning;
+        return <button type="button" key={value} data-ai-mode={value} aria-pressed={workspace === 'ai' && aiMode === value} className={workspace === 'ai' && aiMode === value ? 'active' : ''} onClick={() => { setWorkspace('ai'); setAiMode(value) }}><em>0{index + 1}</em><Icon weight={workspace === 'ai' && aiMode === value ? 'duotone' : 'regular'} /><span><strong>{copy.title}</strong><small>{copy.short}</small></span></button>;
       })}
       <div className="mode-utilities">
-        {mode === 'causal' && <label className="causal-toggle"><input type="checkbox" checked={causalOnly} onChange={(event) => setCausalOnly(event.target.checked)} /><i />只看关联路径</label>}
-        <div className="density-control" role="group" aria-label="列表密度">{([['compact','紧'],['standard','标'],['relaxed','宽']] as const).map(([value,label]) => <button type="button" key={value} title={value === 'compact' ? '紧凑密度' : value === 'standard' ? '标准密度' : '宽松密度'} aria-pressed={density === value} className={density === value ? 'active' : ''} onClick={() => setDensity(value)}>{label}</button>)}</div>
+        <button type="button" className={`git-evidence-entry ${workspace === 'git' ? 'active' : ''}`} aria-pressed={workspace === 'git'} onClick={() => setWorkspace('git')}><GitBranch /><span><strong>Git 证据</strong><small>提交 · 分支 · 操作</small></span></button>
       </div>
     </nav>
 
-    <div className="layout">
+    {workspace === 'ai' ? <AiWorkspace mode={aiMode} data={data} enabled={codexEvidenceEnabled} evidence={codexEvidence} loading={codexEvidenceLoading} onEnable={toggleCodexEvidence} onRefresh={() => loadCodexEvidence()} onTask={(id) => loadCodexEvidence(id)} /> : <div className="layout">
       {navigationOpen && <><button type="button" className="drawer-scrim" onClick={() => setNavigationOpen(false)} aria-label="关闭仓库导航" /><Sidebar data={data} activeBranch={activeBranch} selectedHash={selectedHash} followCodex={followCodex} followContext={followContext} repositoryBrowserOpen={repositoryBrowserOpen} directoryListing={directoryListing} recentRepositories={recentRepositories} repositoryPathDraft={repositoryPathDraft} repositoryBrowserLoading={repositoryBrowserLoading} repositoryBrowserError={repositoryBrowserError} onBranch={(branch) => { setActiveBranch(branch); setNavigationOpen(false) }} onSelect={selectCommit} onToggleRepositoryBrowser={toggleRepositoryBrowser} onRepositoryPathDraft={setRepositoryPathDraft} onBrowseDirectory={browseDirectory} onLoadRepository={loadRepositoryFromBrowser} onFollow={toggleFollowCodex} onGitOperations={toggleGitCommand} onClose={() => setNavigationOpen(false)} /></>}
       <section className="history">
+        <div className="git-evidence-tabs"><span><GitBranch />Git 证据视图</span>{(Object.keys(modeCopy) as AppMode[]).map((value) => { const copy = modeCopy[value]; const Icon = copy.Icon; return <button type="button" key={value} data-mode={value} className={mode === value ? 'active' : ''} onClick={() => switchMode(value)}><Icon /><strong>{copy.title}</strong></button> })}<div className="density-control" role="group" aria-label="列表密度">{([['compact','紧'],['standard','标'],['relaxed','宽']] as const).map(([value,label]) => <button type="button" key={value} title={value === 'compact' ? '紧凑密度' : value === 'standard' ? '标准密度' : '宽松密度'} aria-pressed={density === value} className={density === value ? 'active' : ''} onClick={() => setDensity(value)}>{label}</button>)}</div></div>
         {error && <div className="toast"><Warning />{error}<button type="button" onClick={() => setError('')}><X /></button></div>}
         {loading && <div className="loading"><ArrowsClockwise /><span>{followCodex ? '正在跟随 Codex 切换仓库…' : '正在读取仓库历史…'}</span></div>}
         {selected && <ModeWorkspace mode={mode} data={data} commits={scoped} selected={selected} activeModule={activeModule} onModule={setActiveModule} onSelect={selectCommit} />}
@@ -273,6 +287,6 @@ export default function App() {
         <footer className="legend"><span className="range-summary">{activeBranch === '全部' ? '全部分支' : activeBranch} · {visible.length} 个提交</span>{data.refs.filter((ref) => ref.type === 'local').slice(0,3).map((ref, index) => <span key={ref.full}><i style={{ background:['#58a6ff','#bc8cff','#e3b341'][index] }} />{ref.short}</span>)}<span className="legend-merge"><GitMerge />合并节点</span><span className="legend-rebase"><ArrowsClockwise />Rebase</span><span><GitCommitIcon />分支点</span><span><b />当前 HEAD</span></footer>
       </section>
       {selected && inspectorOpen && <Inspector commit={selected} details={details} comparison={comparison} analyzing={analyzing} comparing={comparing} analysis={analysis} onAnalyze={analyze} onCompare={compareParent} onClose={() => setInspectorOpen(false)} />}
-    </div>
+    </div>}
   </main>;
 }

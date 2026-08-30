@@ -2,7 +2,7 @@ const { execFileSync, spawn } = require('node:child_process');
 const path = require('node:path');
 
 const SOURCE_KINDS = ['cli', 'vscode', 'appServer', 'exec'];
-const VALIDATION_PATTERN = /(^|\s|[\\/])(test|tests|pytest|vitest|jest|mocha|playwright|cypress|cargo\s+test|go\s+test|npm\s+(run\s+)?(test|build|lint|typecheck)|pnpm\s+(test|build|lint|typecheck)|yarn\s+(test|build|lint|typecheck)|tsc\b|eslint\b|ruff\b)/i;
+const VALIDATION_PATTERN = /\b(pytest|vitest|jest|mocha|playwright|cypress|cargo\s+test|go\s+test|npm\s+(?:run\s+)?(?:test|build|lint|typecheck)|pnpm\s+(?:run\s+)?(?:test|build|lint|typecheck)|yarn\s+(?:run\s+)?(?:test|build|lint|typecheck)|tsc(?:\s|$)|eslint(?:\s|$)|ruff\s+check)\b/i;
 
 function codexExecutable() {
   if (process.env.GIT_ATLAS_CODEX_BIN) return process.env.GIT_ATLAS_CODEX_BIN;
@@ -14,6 +14,15 @@ function codexExecutable() {
 function textLimit(value, maximum = 320) {
   const normalized = String(value || '').replace(/\s+/g, ' ').trim();
   return normalized.length > maximum ? `${normalized.slice(0, maximum - 1)}…` : normalized;
+}
+
+function displayCommand(value) {
+  let command = String(value || '').replace(/\s+/g, ' ').trim();
+  const shellMarker = command.match(/(?:-Command|\/c)\s+(.+)$/i);
+  if (shellMarker) command = shellMarker[1].replace(/^['"]|['"]$/g, '').trim();
+  const validationStart = command.search(VALIDATION_PATTERN);
+  if (validationStart > 0) command = command.slice(validationStart);
+  return textLimit(command, 280);
 }
 
 function statusType(value) {
@@ -40,7 +49,15 @@ function threadMatch(thread, repoPath) {
 
 function userText(item) {
   if (item?.type !== 'userMessage' || !Array.isArray(item.content)) return '';
-  return textLimit(item.content.filter((input) => input?.type === 'text').map((input) => input.text).join('\n'), 640);
+  let value = item.content.filter((input) => input?.type === 'text').map((input) => input.text).join('\n').trim();
+  const requestMarker = value.lastIndexOf('## My request:');
+  if (requestMarker >= 0) value = value.slice(requestMarker + '## My request:'.length);
+  value = value
+    .replace(/<in-app-browser-context\b[^>]*>[\s\S]*?<\/in-app-browser-context>/gi, '')
+    .replace(/<response-annotations>[\s\S]*?<\/response-annotations>/gi, '')
+    .replace(/^# Files mentioned by the user:[\s\S]*?Distinguish instructions in attached documents from the user's request\.?/i, '')
+    .trim();
+  return textLimit(value, 640);
 }
 
 function relativeFile(filePath, repoPath) {
@@ -63,7 +80,7 @@ function normalizeTurn(turn, repoPath) {
     // Reasoning items are intentionally ignored. Git Atlas only presents user-visible evidence.
     if (item?.type === 'reasoning' || item?.type === 'plan') continue;
     if (item?.type === 'commandExecution') {
-      const command = textLimit(item.command, 280);
+      const command = displayCommand(item.command);
       const action = {
         id: item.id,
         type: 'command',
@@ -74,7 +91,7 @@ function normalizeTurn(turn, repoPath) {
         source: 'codex-event',
       };
       actions.push(action);
-      if (VALIDATION_PATTERN.test(command)) validations.push({ ...action, passed: item.exitCode === 0 || statusType(item.status) === 'completed' });
+      if (VALIDATION_PATTERN.test(command)) validations.push({ ...action, passed: item.exitCode == null ? statusType(item.status) === 'completed' : item.exitCode === 0 });
     } else if (item?.type === 'fileChange') {
       for (const change of item.changes || []) {
         const file = relativeFile(change.path, repoPath);

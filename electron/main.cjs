@@ -8,6 +8,8 @@ const { attachBranchOperations } = require('./branch-operations.cjs');
 const { executeGitAction, getWorkspaceStatus } = require('./git-actions.cjs');
 const { loadCodexEvidence, stopCodexEvidence } = require('./codex-evidence.cjs');
 
+if (process.env.GIT_ATLAS_QA_USER_DATA) app.setPath('userData', path.resolve(process.env.GIT_ATLAS_QA_USER_DATA));
+
 const execFileAsync = promisify(execFile);
 const isDev = !app.isPackaged;
 const COLORS = ['#68a8e8', '#9b8ae7', '#d4a855', '#52ad9c', '#d87575', '#7d91a8', '#b982ad', '#87996d'];
@@ -241,6 +243,7 @@ async function getCodexProjectContext() {
 }
 
 function createWindow() {
+  if (process.env.GIT_ATLAS_CAPTURE_REPO) writeSettings({ lastRepo: path.resolve(process.env.GIT_ATLAS_CAPTURE_REPO), recentRepos: [path.resolve(process.env.GIT_ATLAS_CAPTURE_REPO)], followCodex: false, codexEvidenceEnabled: process.env.GIT_ATLAS_CAPTURE_AI === '1' });
   if (process.env.GIT_ATLAS_SMOKE) {
     const smokeRepo = process.env.GIT_ATLAS_SMOKE_REPO || null;
     writeSettings({ lastRepo: smokeRepo, recentRepos: smokeRepo ? [smokeRepo] : [], followCodex: false });
@@ -392,6 +395,18 @@ function createWindow() {
           }
         })()`);
         fs.writeFileSync(process.env.GIT_ATLAS_SMOKE, JSON.stringify({ nativeRepo, codexContext, checks, rendererErrors }, null, 2));
+      }
+      if (process.env.GIT_ATLAS_CAPTURE_AI === '1' && !process.env.GIT_ATLAS_SMOKE) {
+        await win.webContents.executeJavaScript(`(async () => {
+          const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          for (let index = 0; index < 60 && !document.querySelector('.ai-task-rail'); index += 1) await wait(250);
+          const mode = ${JSON.stringify(process.env.GIT_ATLAS_CAPTURE_AI_MODE || 'tasks')};
+          document.querySelector('[data-ai-mode="' + CSS.escape(mode) + '"]')?.click();
+          await wait(300);
+        })()`);
+      }
+      if (process.env.GIT_ATLAS_CAPTURE_WORKSPACE === 'git' && !process.env.GIT_ATLAS_SMOKE) {
+        await win.webContents.executeJavaScript(`(async () => { document.querySelector('.git-evidence-entry')?.click(); await new Promise((resolve) => setTimeout(resolve, 500)); })()`);
       }
       const image = await win.capturePage();
       fs.writeFileSync(process.env.GIT_ATLAS_CAPTURE, image.resize({ width: 1440, height: 1024, quality: 'best' }).toPNG());
