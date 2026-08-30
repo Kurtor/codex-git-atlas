@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight, ArrowsClockwise, BracketsCurly, CaretDown, ChartLineUp, CheckCircle,
-  CirclesThreePlus, ClockCounterClockwise, Code, GitBranch, GitCommit as GitCommitIcon, GitFork,
-  DotsThreeVertical, Folders, GitMerge, MagnifyingGlass, Minus, Path, Plus, Robot, SidebarSimple,
-  Tag, TerminalWindow, TreeStructure, Warning, X,
+  CirclesThreePlus, Code, GitBranch, GitCommit as GitCommitIcon,
+  Folders, GitMerge, MagnifyingGlass, Minus, Plus, Robot, SidebarSimple,
+  Tag, TerminalWindow, Warning, X,
 } from '@phosphor-icons/react';
 import GraphCanvas, { graphHeight } from './GraphCanvas';
 import { collectRelations, commitRiskScore, riskLevel, type AppMode } from './analytics';
@@ -189,7 +189,7 @@ export default function App() {
     if (event.key === 'Escape' && gitCommandOpen) { setGitCommandOpen(false); return }
     if (event.key === 'Escape' && navigationOpen) { setNavigationOpen(false); return }
     if (event.key === 'Escape' && inspectorOpen) { setInspectorOpen(false); return }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); document.querySelector<HTMLInputElement>('.history-toolbar input')?.focus(); return }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); document.querySelector<HTMLInputElement>('.global-search input')?.focus(); return }
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || target instanceof HTMLButtonElement || (target instanceof HTMLElement && target.isContentEditable)) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { const index = visible.findIndex((commit) => commit.hash === selectedHash); const next = event.key === 'ArrowDown' ? Math.min(visible.length - 1, index + 1) : Math.max(0, index - 1); if (visible[next]) setSelectedHash(visible[next].hash) }
