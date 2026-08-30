@@ -246,7 +246,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1440, height: 1024, minWidth: 1080, minHeight: 680,
     backgroundColor: '#111315', show: false,
-    titleBarStyle: 'hidden', titleBarOverlay: { color: '#111315', symbolColor: '#9ca3a6', height: 40 },
+    titleBarStyle: 'hidden', titleBarOverlay: { color: '#090e14', symbolColor: '#9ca3a6', height: 40 },
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false },
   });
   win.webContents.on('console-message', (_event, detailsOrLevel, legacyMessage) => {
@@ -279,6 +279,7 @@ function createWindow() {
         }
         const codexContext = await getCodexProjectContext();
         const checks = await win.webContents.executeJavaScript(`(async () => {
+          try {
           const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           const expectedFollowLabel = ${JSON.stringify(codexContext.status === 'ready' ? `已跟随：${codexContext.projectName || ''}` : codexContext.status === 'ambiguous' ? `${codexContext.projectName || ''} 含多个仓库` : codexContext.message || '')};
           const expectedRepoName = ${JSON.stringify(nativeRepo.name || '')};
@@ -292,11 +293,17 @@ function createWindow() {
           const expectedSearchTerm = ${JSON.stringify(nativeRepo.searchTerm || '')};
           const expectedCommitCount = ${JSON.stringify(nativeRepo.commitCount || 0)};
           const result = {};
+          const shellbarRect = document.querySelector('.shellbar').getBoundingClientRect();
+          const shellbarItems = [...document.querySelectorAll('.shellbar > button, .shellbar > label')];
+          result.windowControlsSafeArea = shellbarRect.left >= 0 && shellbarRect.right <= window.innerWidth && shellbarItems.every((item) => {
+            const rect = item.getBoundingClientRect();
+            return rect.left >= shellbarRect.left && rect.right <= shellbarRect.right;
+          });
           const repositoryToggle = document.querySelector('[data-repository-browser-toggle]');
           repositoryToggle?.click(); await wait(180);
           result.integratedRepositoryBrowser = Boolean(document.querySelector('[data-repository-browser]')) && Boolean(document.querySelector('.repository-path input')) && Boolean(document.querySelector('.directory-list')) && document.body.innerText.includes('本机文件');
           document.querySelector('.repository-browser-header > button')?.click(); await wait(80);
-          const gitToggle = document.querySelector('.history-toolbar [data-git-command-toggle]');
+          const gitToggle = document.querySelector('.shellbar [data-git-command-toggle]');
           gitToggle?.click(); await wait(220);
           result.gitCommandDock = Boolean(document.querySelector('[data-git-command-dock]')) && document.body.innerText.includes('远端同步') && document.body.innerText.includes('工作区') && document.body.innerText.includes('提交说明');
           document.querySelector('[data-git-action="push"]')?.click(); await wait(40);
@@ -304,7 +311,7 @@ function createWindow() {
           result.gitWorkspaceStatus = Boolean(document.querySelector('.git-status-numbers')) && Boolean(document.querySelector('.git-command-branch span')?.textContent);
           document.querySelector('.git-confirm button:last-child')?.click(); await wait(30);
           gitToggle?.click(); await wait(80);
-          const search = document.querySelector('.history-toolbar input');
+          const search = document.querySelector('.shellbar .global-search input');
           const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
           setter.call(search, expectedSearchTerm); search.dispatchEvent(new Event('input', { bubbles: true })); await wait(80);
           result.search = Boolean(expectedSearchTerm) && document.querySelectorAll('.commit-row').length > 0 && document.querySelectorAll('.commit-row').length < expectedCommitCount;
@@ -326,7 +333,7 @@ function createWindow() {
           const follow = document.querySelector('.follow-switch input');
           if (follow && !follow.checked) follow.click(); await wait(2200);
           result.followControl = Boolean(follow?.checked) && document.body.innerText.includes('跟随 Codex');
-          result.followLoadedRepo = document.body.innerText.includes(expectedFollowLabel) && document.body.innerText.includes(expectedFollowRepoName) && !document.querySelector('.history-toolbar span')?.innerText.includes('演示数据');
+          result.followLoadedRepo = document.body.innerText.includes(expectedFollowLabel) && document.body.innerText.includes(expectedFollowRepoName) && !document.querySelector('.shellbar')?.innerText.includes('演示数据');
           const branchButton = [...document.querySelectorAll('.branch-list button[data-branch]')].find((button) => Number(button.dataset.commitCount) > 1);
           branchButton?.click(); await wait(120);
           result.branchReachability = Boolean(branchButton) && document.querySelectorAll('.commit-row').length === Number(branchButton?.dataset.commitCount) && Number(branchButton?.dataset.commitCount) > 1;
@@ -372,11 +379,14 @@ function createWindow() {
           if (captureOperation) document.querySelector('.commit-row[data-operations~="' + CSS.escape(captureOperation) + '"]')?.click();
           if (captureRepositoryBrowser && !document.querySelector('[data-repository-browser]')) document.querySelector('[data-repository-browser-toggle]')?.click();
           if (captureGitDock && !document.querySelector('[data-git-command-dock]')) {
-            document.querySelector('.history-toolbar [data-git-command-toggle]')?.click(); await wait(120);
+            document.querySelector('.shellbar [data-git-command-toggle]')?.click(); await wait(120);
             document.querySelector('[data-git-action="push"]')?.click();
           }
           await wait(120);
           return result;
+          } catch (error) {
+            return { smokeFailure: { message: error?.message || String(error), stack: error?.stack || '' } };
+          }
         })()`);
         fs.writeFileSync(process.env.GIT_ATLAS_SMOKE, JSON.stringify({ nativeRepo, codexContext, checks, rendererErrors }, null, 2));
       }

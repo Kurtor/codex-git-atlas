@@ -63,6 +63,9 @@ code, kbd { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 
 .shellbar {
   grid-row: 2;
+  justify-self: start;
+  width: env(titlebar-area-width, 100%);
+  margin-left: env(titlebar-area-x, 0px);
   min-width: 0;
   display: grid;
   grid-template-columns: 166px minmax(176px, 230px) minmax(112px, 148px) minmax(138px, 168px) minmax(190px, 1fr) 108px 38px 38px;
