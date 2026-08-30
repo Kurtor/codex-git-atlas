@@ -24,7 +24,7 @@
 
 ```text
 用户目标 ──▶ Codex 行动 ──▶ 文件事件 ──▶ Git 提交 / 分支 ──▶ 验证证据
-  为什么          怎么做          改了什么          真正落盘什么          是否可信
+  为什么          怎么做      改了什么      真正落盘什么         是否可信
 ```
 
 ![Git Atlas 的 Git × Codex 任务证据工作区](docs/assets/git-atlas-ai-git-evidence.png)
