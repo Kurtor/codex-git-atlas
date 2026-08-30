@@ -1,9 +1,9 @@
 {
   "name": "codex-git-atlas",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "author": "Kurtor",
-  "description": "面向 Codex 的本地可视化 Git 历史分析器",
+  "description": "以 Git 为事实底座、以 Codex 为意图上下文的本地代码演化工作台",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {

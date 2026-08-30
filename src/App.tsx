@@ -246,7 +246,7 @@ export default function App() {
   return <main className={`app active-mode-${mode} workspace-${workspace} ${navigationOpen ? 'navigation-open' : ''} ${inspectorOpen ? 'inspector-open' : ''}`} data-mode={mode}>
     <div className="titlebar" />
     <header className="shellbar">
-      <div className="logo"><img src="./git-atlas-mark.png" alt="" /><span><strong>Git Atlas</strong><small>本地 Git 智能工作台</small></span></div>
+      <div className="logo"><img src="./git-atlas-mark.png" alt="" /><span><strong>Git Atlas</strong><small>AI 原生 Git 证据工作台</small></span></div>
       <button type="button" className="repository-trigger" onClick={() => { setRepositoryBrowserOpen(false); setNavigationOpen((open) => !open) }} aria-expanded={navigationOpen} title={data.path}><BracketsCurly weight="duotone" /><span><strong>{data.name}</strong><small>{isDemo ? '演示数据' : data.path}</small></span><CaretDown /></button>
       <button type="button" className="branch-trigger" onClick={() => { setRepositoryBrowserOpen(false); setNavigationOpen(true) }}><GitBranch /><span>{activeBranch === '全部' ? data.branch : activeBranch}</span><small>{activeBranch === '全部' ? '全部' : '筛选'}</small><CaretDown /></button>
       <label className={`codex-follow ${followCodex ? 'enabled' : ''}`} title={followLabel}><Robot weight={followCodex ? 'fill' : 'regular'} /><span><strong>{followLabel}</strong><small>{followCodex ? '自动切换仓库' : '固定当前仓库'}</small></span><input type="checkbox" checked={followCodex} onChange={(event) => toggleFollowCodex(event.target.checked)} /><i /></label>
@@ -256,20 +256,23 @@ export default function App() {
       <button type="button" className="icon-button" onClick={refreshRepository} aria-label="刷新仓库" title="刷新仓库"><ArrowsClockwise /></button>
     </header>
 
-    <nav className="mode-tabs ai-primary-tabs" aria-label="AI 代码演化工作模式">
-      {(Object.keys(aiModeCopy) as AiMode[]).map((value, index) => {
+    <nav className="mode-tabs" aria-label={workspace === 'ai' ? 'AI 协作模式' : 'Git 图谱分析模式'}>
+      {workspace === 'ai' ? (Object.keys(aiModeCopy) as AiMode[]).map((value, index) => {
         const copy = aiModeCopy[value]; const Icon = value === 'tasks' ? Robot : value === 'code' ? Code : value === 'handoff' ? CirclesThreePlus : Warning;
-        return <button type="button" key={value} data-ai-mode={value} aria-pressed={workspace === 'ai' && aiMode === value} className={workspace === 'ai' && aiMode === value ? 'active' : ''} onClick={() => { setWorkspace('ai'); setAiMode(value) }}><em>0{index + 1}</em><Icon weight={workspace === 'ai' && aiMode === value ? 'duotone' : 'regular'} /><span><strong>{copy.title}</strong><small>{copy.short}</small></span></button>;
+        return <button type="button" key={value} data-ai-mode={value} aria-pressed={aiMode === value} className={aiMode === value ? 'active' : ''} onClick={() => setAiMode(value)}><em>0{index + 1}</em><Icon weight={aiMode === value ? 'duotone' : 'regular'} /><span><strong>{copy.title}</strong><small>{copy.short}</small></span></button>;
+      }) : (Object.keys(modeCopy) as AppMode[]).map((value, index) => {
+        const copy = modeCopy[value]; const Icon = copy.Icon;
+        return <button type="button" key={value} data-mode={value} aria-pressed={mode === value} className={mode === value ? 'active' : ''} onClick={() => switchMode(value)}><em>0{index + 1}</em><Icon weight={mode === value ? 'duotone' : 'regular'} /><span><strong>{copy.title}</strong><small>{copy.short}</small></span></button>;
       })}
       <div className="mode-utilities">
-        <button type="button" className={`git-evidence-entry ${workspace === 'git' ? 'active' : ''}`} aria-pressed={workspace === 'git'} onClick={() => setWorkspace('git')}><GitBranch /><span><strong>Git 证据</strong><small>提交 · 分支 · 操作</small></span></button>
+        <div className="workspace-layer-switch" role="group" aria-label="工作层"><button type="button" className={workspace === 'ai' ? 'active ai' : 'ai'} aria-pressed={workspace === 'ai'} onClick={() => setWorkspace('ai')}><Robot /><span><strong>AI 协作</strong><small>意图与验证</small></span></button><button type="button" className={workspace === 'git' ? 'active git' : 'git'} aria-pressed={workspace === 'git'} onClick={() => setWorkspace('git')}><GitBranch /><span><strong>Git 图谱</strong><small>历史与操作</small></span></button></div>
       </div>
     </nav>
 
     {workspace === 'ai' ? <AiWorkspace mode={aiMode} data={data} enabled={codexEvidenceEnabled} evidence={codexEvidence} loading={codexEvidenceLoading} onEnable={toggleCodexEvidence} onRefresh={() => loadCodexEvidence()} onTask={(id) => loadCodexEvidence(id)} /> : <div className="layout">
       {navigationOpen && <><button type="button" className="drawer-scrim" onClick={() => setNavigationOpen(false)} aria-label="关闭仓库导航" /><Sidebar data={data} activeBranch={activeBranch} selectedHash={selectedHash} followCodex={followCodex} followContext={followContext} repositoryBrowserOpen={repositoryBrowserOpen} directoryListing={directoryListing} recentRepositories={recentRepositories} repositoryPathDraft={repositoryPathDraft} repositoryBrowserLoading={repositoryBrowserLoading} repositoryBrowserError={repositoryBrowserError} onBranch={(branch) => { setActiveBranch(branch); setNavigationOpen(false) }} onSelect={selectCommit} onToggleRepositoryBrowser={toggleRepositoryBrowser} onRepositoryPathDraft={setRepositoryPathDraft} onBrowseDirectory={browseDirectory} onLoadRepository={loadRepositoryFromBrowser} onFollow={toggleFollowCodex} onGitOperations={toggleGitCommand} onClose={() => setNavigationOpen(false)} /></>}
       <section className="history">
-        <div className="git-evidence-tabs"><span><GitBranch />Git 证据视图</span>{(Object.keys(modeCopy) as AppMode[]).map((value) => { const copy = modeCopy[value]; const Icon = copy.Icon; return <button type="button" key={value} data-mode={value} className={mode === value ? 'active' : ''} onClick={() => switchMode(value)}><Icon /><strong>{copy.title}</strong></button> })}<div className="density-control" role="group" aria-label="列表密度">{([['compact','紧'],['standard','标'],['relaxed','宽']] as const).map(([value,label]) => <button type="button" key={value} title={value === 'compact' ? '紧凑密度' : value === 'standard' ? '标准密度' : '宽松密度'} aria-pressed={density === value} className={density === value ? 'active' : ''} onClick={() => setDensity(value)}>{label}</button>)}</div></div>
+        <div className="git-view-controls"><span><GitBranch />Git 图谱 · {activeBranch === '全部' ? '全部分支' : activeBranch}</span>{mode === 'causal' && <label className="causal-toggle"><input type="checkbox" checked={causalOnly} onChange={(event) => setCausalOnly(event.target.checked)} /><i />只看关联路径</label>}<div className="density-control" role="group" aria-label="列表密度">{([['compact','紧'],['standard','标'],['relaxed','宽']] as const).map(([value,label]) => <button type="button" key={value} title={value === 'compact' ? '紧凑密度' : value === 'standard' ? '标准密度' : '宽松密度'} aria-pressed={density === value} className={density === value ? 'active' : ''} onClick={() => setDensity(value)}>{label}</button>)}</div></div>
         {error && <div className="toast"><Warning />{error}<button type="button" onClick={() => setError('')}><X /></button></div>}
         {loading && <div className="loading"><ArrowsClockwise /><span>{followCodex ? '正在跟随 Codex 切换仓库…' : '正在读取仓库历史…'}</span></div>}
         {selected && <ModeWorkspace mode={mode} data={data} commits={scoped} selected={selected} activeModule={activeModule} onModule={setActiveModule} onSelect={selectCommit} />}

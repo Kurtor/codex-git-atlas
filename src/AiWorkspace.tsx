@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight, CheckCircle, Clock, Code, FileCode, GitCommit as GitCommitIcon,
-  Lightning, Robot, ShieldCheck, TerminalWindow, WarningCircle,
+  GitBranch, Lightning, Robot, ShieldCheck, TerminalWindow, WarningCircle,
 } from '@phosphor-icons/react';
 import type { CodexEvidence, CodexEvidenceTask, CodexEvidenceTurn, EvidenceSource, GitCommit, RepositoryData } from './types';
 
@@ -54,7 +54,7 @@ function TaskRail({ evidence, selectedTask, selectedTurn, onTask, onTurn, onDisa
   </aside>;
 }
 
-function TaskFlow({ turn }: { turn: CodexEvidenceTurn }) {
+function TaskFlow({ turn, commits }: { turn: CodexEvidenceTurn; commits: GitCommit[] }) {
   const actions = turn.actions.filter((item) => item.type !== 'file-change').slice(-4);
   const validation = turn.validations.at(-1);
   return <div className="evidence-flow">
@@ -62,7 +62,7 @@ function TaskFlow({ turn }: { turn: CodexEvidenceTurn }) {
     <ArrowRight className="flow-arrow" />
     <article className="flow-node action"><header><span>02</span><b>AI 行动</b><SourceBadge source="codex-event" /></header>{actions.length ? <div className="flow-actions">{actions.map((action) => <span key={action.id}>{action.type === 'command' ? <TerminalWindow /> : <Lightning />}<code>{action.label}</code><i className={action.status} /></span>)}</div> : <p className="flow-empty">没有可见行动记录</p>}<footer>{turn.actions.length} 个可见动作</footer></article>
     <ArrowRight className="flow-arrow" />
-    <article className="flow-node code"><header><span>03</span><b>代码证据</b><SourceBadge source="codex-event" /></header><div className="flow-files">{turn.files.slice(0, 5).map((file) => <span key={`${file.path}-${file.kind}`}><FileCode />{file.path}<em>{file.kind}</em></span>)}{!turn.files.length && <p className="flow-empty">本回合没有文件变更</p>}</div><footer>{turn.files.length} 个文件</footer></article>
+    <article className="flow-node code"><header><span>03</span><b>Git / 代码证据</b><SourceBadge source="git-evidence" /></header><div className="flow-code-evidence"><div className="flow-commits">{commits.slice(0, 2).map((commit) => <span key={commit.hash}><GitCommitIcon /><code>{commit.shortHash}</code><b>{commit.subject}</b></span>)}{!commits.length && <p>尚未在任务时间窗内找到 Git 提交</p>}</div><div className="flow-files">{turn.files.slice(0, 4).map((file) => <span key={`${file.path}-${file.kind}`}><FileCode />{file.path}<em>{file.kind}</em></span>)}</div></div><footer>{commits.length} 个 Git 提交 · {turn.files.length} 个 Codex 文件事件</footer></article>
     <ArrowRight className="flow-arrow" />
     <article className={`flow-node validate ${validation?.passed ? 'passed' : turn.files.length ? 'missing' : ''}`}><header><span>04</span><b>验证结果</b><SourceBadge source={validation ? 'codex-event' : 'automatic-association'} /></header>{validation ? <><div className="validation-result">{validation.passed ? <CheckCircle weight="fill" /> : <WarningCircle weight="fill" />}<span><strong>{validation.passed ? '验证通过' : '验证失败'}</strong><code>{validation.label}</code></span></div><footer>退出码 {validation.exitCode ?? '未知'}</footer></> : <><p className="flow-empty">没有找到与本次改动关联的测试或构建记录</p><footer>需要人工确认</footer></>}</article>
   </div>;
@@ -99,11 +99,10 @@ function DebtView({ task }: { task: CodexEvidenceTask }) {
   return <div className="debt-view"><header><div><WarningCircle weight="duotone" /><span><b>验证债务清单</b><small>不是“风险分”，每一项都能回到证据</small></span></div><div className="debt-totals"><span><b>{task.verificationDebt.filter((item) => item.severity === 'high').length}</b>阻断</span><span><b>{validations.length}</b>验证</span><span><b>{passed}</b>通过</span></div></header><div className="debt-columns"><section className="debt-list">{task.verificationDebt.map((debt, index) => <article key={debt.id} className={debt.severity}><em>{String(index + 1).padStart(2, '0')}</em><i /><span><strong>{debt.title}</strong><p>{debt.detail}</p></span><SourceBadge source={debt.source} /></article>)}</section><section className="validation-ledger"><header><TerminalWindow /><span><b>验证账本</b><small>最近 {Math.min(8, validations.length)} 条执行证据</small></span><SourceBadge source="codex-event" /></header><div>{validations.slice(-8).reverse().map((item, index) => <article key={`${item.id}-${index}`}><i className={item.passed ? 'passed' : 'failed'} /> <span><code>{item.label}</code><small>{item.turn}</small></span><b>{item.passed ? '通过' : '失败'}</b></article>)}{!validations.length && <p>没有识别到测试、构建、类型检查或 lint 命令。</p>}</div></section></div><footer><ShieldCheck /><span><b>判定边界</b>只检查可观察到的命令、退出状态、文件触达和任务状态；没有证据时会明确写“未知”。</span></footer></div>;
 }
 
-function Dossier({ task, turn }: { task: CodexEvidenceTask; turn: CodexEvidenceTurn }) {
-  const changed = task.turns.reduce((sum, item) => sum + item.files.length, 0);
+function Dossier({ task, turn, commits }: { task: CodexEvidenceTask; turn: CodexEvidenceTurn; commits: GitCommit[] }) {
   const validationCount = task.turns.reduce((sum, item) => sum + item.validations.length, 0);
-  return <aside className="ai-dossier"><header><small>AI 改动档案</small><h2>{task.title}</h2><span className={`task-state ${task.status}`}>{statusLabel(task.status)}</span></header>
-    <section className="dossier-metrics"><span><b>{task.turns.length}</b><small>任务回合</small></span><span><b>{task.files.length}</b><small>触达文件</small></span><span><b>{validationCount}</b><small>验证记录</small></span><span><b>{changed}</b><small>文件触达次数</small></span></section>
+  return <aside className="ai-dossier"><header><small>任务 × Git 变更档案</small><h2>{task.title}</h2><span className={`task-state ${task.status}`}>{statusLabel(task.status)}</span></header>
+    <section className="dossier-metrics"><span><b>{task.turns.length}</b><small>任务回合</small></span><span><b>{commits.length}</b><small>关联提交</small></span><span><b>{task.files.length}</b><small>触达文件</small></span><span><b>{validationCount}</b><small>验证记录</small></span></section>
     <section><label>当前目标 <SourceBadge source="codex-event" /></label><p>{turn.goal}</p></section>
     <section><label>可见结果 <SourceBadge source="codex-event" /></label><p>{turn.outcome || '本回合没有可见的最终回复。'}</p></section>
     <section className="dossier-provenance"><label>关联依据</label><span><b>工作目录</b>{task.match === 'repository' ? '仓库根目录完全匹配' : task.match === 'repository-child' ? '任务位于仓库子目录' : '任务工作区包含当前仓库'}</span><span><b>分支</b>{task.branch || '未记录'}</span><span><b>起点 SHA</b>{task.sha?.slice(0, 10) || '未记录'}</span></section>
@@ -128,13 +127,13 @@ export default function AiWorkspace({ mode, data, enabled, evidence, loading, on
   if (!enabled || !task || !turn) return <div className="ai-workspace ai-workspace-empty"><EmptyEvidence enabled={enabled} loading={loading} message={evidence?.message} onEnable={onEnable} onRefresh={onRefresh} /></div>;
   return <div className={`ai-workspace ai-mode-${mode}`}>
     <TaskRail evidence={evidence!} selectedTask={task} selectedTurn={turn} onTask={onTask} onTurn={setSelectedTurnId} onDisable={() => onEnable(false)} />
-    <main className="ai-evidence-canvas"><header><div><small>当前阅读单位</small><h1>{mode === 'tasks' ? turn.goal : aiModeCopy[mode].title}</h1></div><span><Clock />{timeLabel(turn.startedAt)} · {durationLabel(turn.durationMs)}</span></header>
-      {mode === 'tasks' && <TaskFlow turn={turn} />}
+    <main className="ai-evidence-canvas"><header><div><small>Git × Codex 证据单元</small><h1>{mode === 'tasks' ? turn.goal : aiModeCopy[mode].title}</h1></div><span><GitBranch />{task.branch || data.branch}<Clock />{timeLabel(turn.startedAt)} · {durationLabel(turn.durationMs)}</span></header>
+      {mode === 'tasks' && <TaskFlow turn={turn} commits={associatedCommits} />}
       {mode === 'code' && <CodeMap task={task} turn={turn} />}
       {mode === 'handoff' && <HandoffView task={task} commits={associatedCommits} />}
       {mode === 'debt' && <DebtView task={task} />}
     </main>
-    <Dossier task={task} turn={turn} />
+    <Dossier task={task} turn={turn} commits={associatedCommits} />
     <GitEvidenceStrip task={task} commits={associatedCommits} />
   </div>;
 }

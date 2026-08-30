@@ -406,7 +406,7 @@ function createWindow() {
         })()`);
       }
       if (process.env.GIT_ATLAS_CAPTURE_WORKSPACE === 'git' && !process.env.GIT_ATLAS_SMOKE) {
-        await win.webContents.executeJavaScript(`(async () => { document.querySelector('.git-evidence-entry')?.click(); await new Promise((resolve) => setTimeout(resolve, 500)); })()`);
+        await win.webContents.executeJavaScript(`(async () => { document.querySelector('.workspace-layer-switch .git')?.click(); await new Promise((resolve) => setTimeout(resolve, 500)); })()`);
       }
       const image = await win.capturePage();
       fs.writeFileSync(process.env.GIT_ATLAS_CAPTURE, image.resize({ width: 1440, height: 1024, quality: 'best' }).toPNG());

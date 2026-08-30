@@ -238,26 +238,33 @@ class CodexAppServerClient {
   }
 }
 
-const client = new CodexAppServerClient();
+const activeClients = new Set();
 
 async function loadCodexEvidence(repoPath, requestedThreadId) {
-  const listed = await client.request('thread/list', {
-    limit: 80,
-    sortKey: 'updated_at',
-    sortDirection: 'desc',
-    sourceKinds: SOURCE_KINDS,
-    archived: false,
-    useStateDbOnly: true,
-  }, 15000);
-  const candidates = (listed?.data || []).map((thread) => ({ thread, match: threadMatch(thread, repoPath) })).filter((item) => item.match);
-  const exact = candidates.filter((item) => item.match !== 'workspace-parent');
-  const selectedPool = exact.length ? exact : candidates;
-  const summaries = selectedPool.slice(0, 16).map(({ thread, match }) => normalizeThread(thread, repoPath, match));
-  const selectedSummary = summaries.find((thread) => thread.id === requestedThreadId) || summaries[0] || null;
-  if (!selectedSummary) return { status: 'empty', tasks: [], selectedTask: null, observedAt: Date.now(), message: '当前仓库尚未关联到 Codex 任务' };
-  const result = await client.request('thread/read', { threadId: selectedSummary.id, includeTurns: true }, 15000);
-  const selectedTask = normalizeThread(result?.thread || result, repoPath, selectedSummary.match);
-  return { status: 'ready', tasks: summaries, selectedTask, observedAt: Date.now(), message: null };
+  const client = new CodexAppServerClient();
+  activeClients.add(client);
+  try {
+    const listed = await client.request('thread/list', {
+      limit: 80,
+      sortKey: 'updated_at',
+      sortDirection: 'desc',
+      sourceKinds: SOURCE_KINDS,
+      archived: false,
+      useStateDbOnly: true,
+    }, 15000);
+    const candidates = (listed?.data || []).map((thread) => ({ thread, match: threadMatch(thread, repoPath) })).filter((item) => item.match);
+    const exact = candidates.filter((item) => item.match !== 'workspace-parent');
+    const selectedPool = exact.length ? exact : candidates;
+    const summaries = selectedPool.slice(0, 16).map(({ thread, match }) => normalizeThread(thread, repoPath, match));
+    const selectedSummary = summaries.find((thread) => thread.id === requestedThreadId) || summaries[0] || null;
+    if (!selectedSummary) return { status: 'empty', tasks: [], selectedTask: null, observedAt: Date.now(), message: '当前仓库尚未关联到 Codex 任务' };
+    const result = await client.request('thread/read', { threadId: selectedSummary.id, includeTurns: true }, 15000);
+    const selectedTask = normalizeThread(result?.thread || result, repoPath, selectedSummary.match);
+    return { status: 'ready', tasks: summaries, selectedTask, observedAt: Date.now(), message: null };
+  } finally {
+    client.stop();
+    activeClients.delete(client);
+  }
 }
 
 module.exports = {
@@ -266,6 +273,6 @@ module.exports = {
   loadCodexEvidence,
   normalizeThread,
   normalizeTurn,
-  stopCodexEvidence: () => client.stop(),
+  stopCodexEvidence: () => { for (const runningClient of activeClients) runningClient.stop(); activeClients.clear(); },
   threadMatch,
 };

@@ -205,14 +205,10 @@ code, kbd { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 .mode-tabs > button small { margin-top: 5px; font-size: 10px; color: var(--atlas-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mode-tabs > button.active small { color: color-mix(in srgb, var(--tab-color) 68%, #b8c4d1); }
 
-.mode-utilities { min-width: 164px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-left: 12px; }
-.git-evidence-entry { height: 50px; min-width: 152px; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 8px; padding: 0 12px; border: 1px solid #2a3a4b; border-radius: 6px; background: #0b131c; color: #91a2b4; cursor: pointer; text-align: left; }
-.git-evidence-entry:hover, .git-evidence-entry.active { border-color: #52687e; background: #14202c; color: #e6edf5; }
-.git-evidence-entry.active { box-shadow: inset 3px 0 0 #7e90a3; }
-.git-evidence-entry svg { width: 23px; height: 23px; color: #8297aa; }
-.git-evidence-entry span { min-width: 0; display: grid; }
-.git-evidence-entry strong { font-size: 12px; }
-.git-evidence-entry small { margin-top: 4px; color: var(--atlas-muted); font-size: 8px; white-space: nowrap; }
+.mode-utilities { min-width: 202px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-left: 12px; }
+.workspace-layer-switch { height: 50px; display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #2b3a4b; border-radius: 6px; overflow: hidden; background: #0a121a; }
+.workspace-layer-switch button { min-width: 94px; display: grid; grid-template-columns: 22px minmax(0,1fr); align-items: center; gap: 5px; padding: 0 7px; border: 0; border-right: 1px solid #2b3a4b; background: transparent; color: #718397; cursor: pointer; text-align: left; }
+.workspace-layer-switch button:last-child { border-right: 0; }.workspace-layer-switch button:hover { background: #111c27; color: #bac7d4; }.workspace-layer-switch button.active { background: #172431; color: #edf3f9; box-shadow: inset 0 -3px 0 #62a8ff; }.workspace-layer-switch button.git.active { box-shadow: inset 0 -3px 0 #7e9bb6; }.workspace-layer-switch svg { width: 17px; color: #7299b9; }.workspace-layer-switch .ai svg { color: #62a8ff; }.workspace-layer-switch span { min-width: 0; display: grid; }.workspace-layer-switch strong { font-size: 9px; white-space: nowrap; }.workspace-layer-switch small { margin-top: 3px; color: #607285; font-size: 7px; white-space: nowrap; }
 .density-control { display: flex; border: 1px solid var(--atlas-line); border-radius: 6px; overflow: hidden; background: #0c131b; }
 .density-control button { width: 30px; height: 30px; padding: 0; border: 0; border-right: 1px solid var(--atlas-line); background: transparent; color: var(--atlas-muted); font-size: 10px; cursor: pointer; }
 .density-control button:last-child { border-right: 0; }
@@ -227,15 +223,9 @@ code, kbd { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 .layout { grid-row: 4; min-height: 0; min-width: 0; position: relative; }
 .history { position: absolute; inset: 0; min-width: 0; display: flex; flex-direction: column; background: var(--atlas-bg); }
 
-.git-evidence-tabs { flex: 0 0 42px; min-width: 0; display: flex; align-items: center; gap: 5px; padding: 5px 12px; border-bottom: 1px solid var(--atlas-line); background: #0a1017; }
-.git-evidence-tabs > span { min-width: 126px; display: flex; align-items: center; gap: 7px; color: #9cacbc; font-size: 10px; font-weight: 650; }
-.git-evidence-tabs > span svg { width: 15px; }
-.git-evidence-tabs > button { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #76889b; cursor: pointer; font-size: 10px; }
-.git-evidence-tabs > button:hover { background: #121c27; color: #bbc7d3; }
-.git-evidence-tabs > button.active { border-color: #34485d; background: #172432; color: #edf3f9; }
-.git-evidence-tabs > button svg { width: 14px; color: var(--mode-accent); }
-.git-evidence-tabs .density-control { margin-left: auto; }
-.workspace-git .inspector { top: 183px !important; }
+.git-view-controls { flex: 0 0 36px; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 3px 12px; border-bottom: 1px solid var(--atlas-line); background: #090f16; }
+.git-view-controls > span { display: flex; align-items: center; gap: 6px; color: #718598; font-size: 9px; }.git-view-controls > span svg { width: 13px; color: var(--mode-accent); }.git-view-controls .causal-toggle { margin-left: auto; }.git-view-controls .density-control { margin-left: auto; }.git-view-controls .causal-toggle + .density-control { margin-left: 0; }
+.workspace-git .inspector { top: 177px !important; }
 
 /* AI evidence workspace */
 .ai-workspace {
@@ -326,6 +316,7 @@ code, kbd { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 .flow-files { min-height: 0; overflow: auto; padding: 7px 0; }
 .flow-files > span { min-width: 0; height: 29px; display: grid; grid-template-columns: 14px minmax(0,1fr) auto; align-items: center; gap: 5px; padding: 0 8px; border-bottom: 1px solid #17232e; color: #98aaba; font: 8px "Cascadia Code", monospace; }
 .flow-files svg { width: 12px; color: #48d3bd; }.flow-files span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.flow-files em { color: #5b7185; font: normal 7px "Segoe UI", sans-serif; }
+.flow-code-evidence { min-height: 0; overflow: auto; }.flow-commits { border-bottom: 1px solid #20312f; background: #0b1816; }.flow-commits > span { min-height: 37px; display: grid; grid-template-columns: 13px 48px minmax(0,1fr); align-items: center; gap: 5px; padding: 5px 8px; border-bottom: 1px solid #172925; }.flow-commits svg { width: 12px; color: #5ccd8a; }.flow-commits code { color: #75c798; font-size: 7px; }.flow-commits b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #92ae9e; font-size: 8px; }.flow-commits p { margin: 0; padding: 11px 8px; color: #718397; font-size: 8px; }
 .flow-empty { color: #718397 !important; font-size: 9px !important; }
 .validation-result { display: flex; align-items: center; gap: 9px; padding: 14px 10px; }.validation-result > svg { width: 22px; height: 22px; color: #58ce84; }.missing .validation-result > svg { color: #ff9a72; }.validation-result span { min-width: 0; display: grid; gap: 7px; }.validation-result strong { font-size: 11px; }.validation-result code { overflow-wrap: anywhere; color: #87a0b6; font-size: 8px; line-height: 1.5; }
 
