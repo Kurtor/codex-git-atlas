@@ -45,3 +45,4 @@ design/*.png
 !design/implementation-final.png
 !design/repository-browser-final.png
 design/*.json
+design/audit-v*/

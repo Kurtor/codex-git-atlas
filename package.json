@@ -1,6 +1,6 @@
 {
   "name": "codex-git-atlas",
-  "version": "1.9.0",
+  "version": "2.0.0",
   "private": true,
   "author": "Kurtor",
   "description": "以 Git 为事实底座、以 Codex 为意图上下文的本地代码演化工作台",
