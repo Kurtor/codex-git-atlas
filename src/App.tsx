@@ -12,6 +12,7 @@ import { ModeWorkspace, ScopeDossier, modeCopy } from './ModeWorkspace';
 import GitCommandDock from './GitCommandDock';
 import RepositoryBrowser from './RepositoryBrowser';
 import AiWorkspace, { aiModeCopy, type AiMode } from './AiWorkspace';
+import MergeCockpit from './MergeCockpit';
 import type { CodexEvidence, CodexProjectContext, CommitDetails, DirectoryListing, GitAction, GitActionResult, GitCommit, GitWorkspaceStatus, ParentComparison, RecentRepository, RepositoryData } from './types';
 
 const ROW_HEIGHT = 43;
@@ -124,6 +125,7 @@ export default function App() {
   const [gitStatusLoading, setGitStatusLoading] = useState(false); const [gitActionRunning, setGitActionRunning] = useState<GitAction | null>(null);
   const [gitActionResult, setGitActionResult] = useState<GitActionResult | null>(null); const [gitActionError, setGitActionError] = useState('');
   const [workspace, setWorkspace] = useState<'ai' | 'git'>('ai'); const [aiMode, setAiMode] = useState<AiMode>('tasks');
+  const [mergeCockpitOpen, setMergeCockpitOpen] = useState(false);
   const [codexEvidenceEnabled, setCodexEvidenceEnabled] = useState(false); const [codexEvidence, setCodexEvidence] = useState<CodexEvidence | null>(null); const [codexEvidenceLoading, setCodexEvidenceLoading] = useState(false);
   const dataPathRef = useRef(data.path); const loadSequenceRef = useRef(0);
   const selected = data.commits.find((commit) => commit.hash === selectedHash) || data.commits[0];
@@ -198,6 +200,7 @@ export default function App() {
     void refreshGitStatus();
   }, [gitCommandOpen, data.path, isDemo, refreshGitStatus]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && mergeCockpitOpen) { setMergeCockpitOpen(false); return }
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); if (isDemo) setError('请先从仓库导航打开本地 Git 仓库'); else setGitCommandOpen((open) => !open); return }
     if (event.key === 'Escape' && gitCommandOpen) { setGitCommandOpen(false); return }
     if (event.key === 'Escape' && navigationOpen) { setNavigationOpen(false); return }
@@ -206,7 +209,7 @@ export default function App() {
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || target instanceof HTMLButtonElement || (target instanceof HTMLElement && target.isContentEditable)) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { const index = visible.findIndex((commit) => commit.hash === selectedHash); const next = event.key === 'ArrowDown' ? Math.min(visible.length - 1, index + 1) : Math.max(0, index - 1); if (visible[next]) setSelectedHash(visible[next].hash) }
-  }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey) }, [visible, selectedHash, gitCommandOpen, navigationOpen, inspectorOpen, isDemo]);
+  }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey) }, [visible, selectedHash, gitCommandOpen, navigationOpen, inspectorOpen, mergeCockpitOpen, isDemo]);
 
   const toggleRepositoryBrowser = () => {
     setNavigationOpen(true);
@@ -243,7 +246,7 @@ export default function App() {
   const selectCommit = (hash: string) => { setSelectedHash(hash); setAnalysis(''); setComparison(null); setInspectorOpen(true) };
   const followLabel = !followCodex ? 'Codex 跟随关闭' : followContext?.status === 'ready' ? 'Codex 已连接' : followContext?.status === 'checking' ? '正在连接 Codex' : '等待 Codex 项目';
 
-  return <main className={`app active-mode-${mode} workspace-${workspace} ${navigationOpen ? 'navigation-open' : ''} ${inspectorOpen ? 'inspector-open' : ''}`} data-mode={mode}>
+  return <main className={`app active-mode-${mode} workspace-${workspace} ${navigationOpen ? 'navigation-open' : ''} ${inspectorOpen ? 'inspector-open' : ''} ${mergeCockpitOpen ? 'merge-cockpit-open' : ''}`} data-mode={mode}>
     <div className="titlebar" />
     <header className="shellbar">
       <div className="logo"><img src="./git-atlas-mark.png" alt="" /><span><strong>Git Atlas</strong><small>AI 原生 Git 证据工作台</small></span></div>
@@ -251,12 +254,15 @@ export default function App() {
       <button type="button" className="branch-trigger" onClick={() => { setRepositoryBrowserOpen(false); setNavigationOpen(true) }}><GitBranch /><span>{activeBranch === '全部' ? data.branch : activeBranch}</span><small>{activeBranch === '全部' ? '全部' : '筛选'}</small><CaretDown /></button>
       <label className={`codex-follow ${followCodex ? 'enabled' : ''}`} title={followLabel}><Robot weight={followCodex ? 'fill' : 'regular'} /><span><strong>{followLabel}</strong><small>{followCodex ? '自动切换仓库' : '固定当前仓库'}</small></span><input type="checkbox" checked={followCodex} onChange={(event) => toggleFollowCodex(event.target.checked)} /><i /></label>
       <label className="global-search"><MagnifyingGlass /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提交、作者、路径…" /><kbd>Ctrl K</kbd></label>
+      <button type="button" className={`merge-preflight-trigger ${mergeCockpitOpen ? 'active' : ''}`} onClick={() => { setGitCommandOpen(false); setMergeCockpitOpen((open) => !open) }}><GitMerge weight="duotone" /><span><strong>合并推演</strong><small>只读预演</small></span></button>
       <button type="button" data-git-command-toggle className={`git-command-trigger ${gitCommandOpen ? 'active' : ''}`} onClick={toggleGitCommand}><TerminalWindow />Git 操作<CaretDown /></button>
       <button type="button" className="icon-button" onClick={toggleRepositoryBrowser} aria-label="打开本机仓库列表" title="打开本机仓库列表"><Folders /></button>
       <button type="button" className="icon-button" onClick={refreshRepository} aria-label="刷新仓库" title="刷新仓库"><ArrowsClockwise /></button>
     </header>
 
-    <nav className="mode-tabs" aria-label={workspace === 'ai' ? 'AI 协作模式' : 'Git 图谱分析模式'}>
+    {mergeCockpitOpen && <MergeCockpit data={data} preferredSource={activeBranch} isDemo={isDemo} evidence={codexEvidence} onClose={() => setMergeCockpitOpen(false)} onOpenGit={() => { setMergeCockpitOpen(false); setGitCommandOpen(true) }} onEnableEvidence={() => toggleCodexEvidence(true)} />}
+
+    {!mergeCockpitOpen && <><nav className="mode-tabs" aria-label={workspace === 'ai' ? 'AI 协作模式' : 'Git 图谱分析模式'}>
       {workspace === 'ai' ? (Object.keys(aiModeCopy) as AiMode[]).map((value, index) => {
         const copy = aiModeCopy[value]; const Icon = value === 'tasks' ? Robot : value === 'code' ? Code : value === 'handoff' ? CirclesThreePlus : Warning;
         return <button type="button" key={value} data-ai-mode={value} aria-pressed={aiMode === value} className={aiMode === value ? 'active' : ''} onClick={() => setAiMode(value)}><em>0{index + 1}</em><Icon weight={aiMode === value ? 'duotone' : 'regular'} /><span><strong>{copy.title}</strong><small>{copy.short}</small></span></button>;
@@ -290,6 +296,6 @@ export default function App() {
         <footer className="legend"><span className="range-summary">{activeBranch === '全部' ? '全部分支' : activeBranch} · {visible.length} 个提交</span>{data.refs.filter((ref) => ref.type === 'local').slice(0,3).map((ref, index) => <span key={ref.full}><i style={{ background:['#58a6ff','#bc8cff','#e3b341'][index] }} />{ref.short}</span>)}<span className="legend-merge"><GitMerge />合并节点</span><span className="legend-rebase"><ArrowsClockwise />Rebase</span><span><GitCommitIcon />分支点</span><span><b />当前 HEAD</span></footer>
       </section>
       {selected && inspectorOpen && <Inspector commit={selected} details={details} comparison={comparison} analyzing={analyzing} comparing={comparing} analysis={analysis} onAnalyze={analyze} onCompare={compareParent} onClose={() => setInspectorOpen(false)} />}
-    </div>}
+    </div>}</>}
   </main>;
 }

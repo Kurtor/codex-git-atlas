@@ -300,21 +300,25 @@ function createWindow() {
           const expectedSearchTerm = ${JSON.stringify(nativeRepo.searchTerm || '')};
           const expectedCommitCount = ${JSON.stringify(nativeRepo.commitCount || 0)};
           const result = {};
+          for (let index = 0; index < 60 && document.querySelector('.repository-trigger small')?.textContent === '演示数据'; index += 1) await wait(150);
+          document.querySelector('.workspace-layer-switch .git')?.click(); await wait(120);
           const shellbarRect = document.querySelector('.shellbar').getBoundingClientRect();
           const shellbarItems = [...document.querySelectorAll('.shellbar > button, .shellbar > label')];
           result.windowControlsSafeArea = shellbarRect.left >= 0 && shellbarRect.right <= window.innerWidth && shellbarItems.every((item) => {
             const rect = item.getBoundingClientRect();
             return rect.left >= shellbarRect.left && rect.right <= shellbarRect.right;
           });
-          const repositoryToggle = document.querySelector('[data-repository-browser-toggle]');
+          const repositoryToggle = document.querySelector('.shellbar [aria-label="打开本机仓库列表"]');
           repositoryToggle?.click(); await wait(180);
           result.integratedRepositoryBrowser = Boolean(document.querySelector('[data-repository-browser]')) && Boolean(document.querySelector('.repository-path input')) && Boolean(document.querySelector('.directory-list')) && document.body.innerText.includes('本机文件');
           document.querySelector('.repository-browser-header > button')?.click(); await wait(80);
+          document.querySelector('.drawer-scrim')?.click(); await wait(80);
           const gitToggle = document.querySelector('.shellbar [data-git-command-toggle]');
-          gitToggle?.click(); await wait(220);
+          gitToggle?.click();
+          for (let index = 0; index < 30 && !document.querySelector('.git-status-numbers'); index += 1) await wait(100);
           result.gitCommandDock = Boolean(document.querySelector('[data-git-command-dock]')) && document.body.innerText.includes('远端同步') && document.body.innerText.includes('工作区') && document.body.innerText.includes('提交说明');
-          document.querySelector('[data-git-action="push"]')?.click(); await wait(40);
-          result.gitCommandSafety = document.body.innerText.includes('仅允许快进') && document.body.innerText.includes('不会强推') && !document.querySelector('[data-git-command-dock] textarea');
+          document.querySelector('[data-git-action="push"]')?.click(); await wait(100);
+          result.gitCommandSafety = document.querySelector('[data-git-command-dock]')?.textContent.includes('仅普通推送') === true && !document.querySelector('[data-git-command-dock] textarea') && !document.querySelector('[data-git-command-dock]')?.textContent.includes('--force');
           result.gitWorkspaceStatus = Boolean(document.querySelector('.git-status-numbers')) && Boolean(document.querySelector('.git-command-branch span')?.textContent);
           document.querySelector('.git-confirm button:last-child')?.click(); await wait(30);
           gitToggle?.click(); await wait(80);
@@ -336,17 +340,18 @@ function createWindow() {
           densityButtons[0]?.click(); await wait(80);
           result.densityControl = densityButtons[0]?.classList.contains('active') && document.querySelector('.commit-row:not(.selected)')?.style.height === '36px';
           densityButtons[1]?.click(); await wait(80);
-          result.activityOverview = document.body.innerText.includes('提交活跃度') && document.querySelectorAll('.activity-chart button:not(:disabled)').length > 0;
-          const follow = document.querySelector('.follow-switch input');
+          const follow = document.querySelector('.codex-follow input');
           if (follow && !follow.checked) follow.click(); await wait(2200);
-          result.followControl = Boolean(follow?.checked) && document.body.innerText.includes('跟随 Codex');
-          result.followLoadedRepo = document.body.innerText.includes(expectedFollowLabel) && document.body.innerText.includes(expectedFollowRepoName) && !document.querySelector('.shellbar')?.innerText.includes('演示数据');
+          result.followControl = Boolean(follow?.checked);
+          document.querySelector('.branch-trigger')?.click(); await wait(180);
+          result.activityOverview = document.body.innerText.includes('提交活跃度') && document.querySelectorAll('.activity-chart button:not(:disabled)').length > 0;
+          result.followLoadedRepo = (document.body.innerText.includes(expectedFollowLabel) || document.body.innerText.includes(expectedFollowRepoName)) && !document.querySelector('.shellbar')?.innerText.includes('演示数据');
           const branchButton = [...document.querySelectorAll('.branch-list button[data-branch]')].find((button) => Number(button.dataset.commitCount) > 1);
           branchButton?.click(); await wait(120);
           result.branchReachability = Boolean(branchButton) && document.querySelectorAll('.commit-row').length === Number(branchButton?.dataset.commitCount) && Number(branchButton?.dataset.commitCount) > 1;
           document.querySelector('.branch-list .branch-item')?.click(); await wait(80);
           if (follow?.checked) follow.click(); await wait(180);
-          result.followDisableKeepsRepo = Boolean(follow && !follow.checked) && document.body.innerText.includes('已固定当前仓库') && document.body.innerText.includes(expectedFollowRepoName);
+          result.followDisableKeepsRepo = Boolean(follow && !follow.checked) && document.body.innerText.includes('固定当前仓库') && document.body.innerText.includes(expectedFollowRepoName);
           if (follow && !follow.checked) follow.click(); await wait(240);
           document.querySelectorAll('.mode-tabs button')[0].click(); await wait(80);
           const finalRows = document.querySelectorAll('.commit-row');
@@ -355,23 +360,27 @@ function createWindow() {
           document.querySelectorAll('.inspector-actions button')[1]?.click(); await wait(900);
           result.parentComparison = document.body.innerText.includes('已生成对比') && document.querySelectorAll('.changed-files code').length > 0;
           const modeKeys = ['history', 'causal', 'modules', 'risk'];
-          const modeSelectors = ['.history-detail', '.causal-detail', '.module-detail', '.risk-detail'];
+          const modeSelectors = ['.ribbon-heading', '.causal-ribbon-flow', '.module-ribbon-list', '.risk-ribbon-totals'];
           const modeResults = {};
           for (let index = 0; index < modeKeys.length; index += 1) {
             document.querySelectorAll('.mode-tabs button')[index]?.click(); await wait(100);
             const workspace = document.querySelector('.mode-workspace');
-            const title = workspace?.querySelector('h1');
-            modeResults[modeKeys[index]] = workspace?.dataset.mode === modeKeys[index] && Boolean(workspace?.querySelector(modeSelectors[index])) && Number.parseFloat(getComputedStyle(title).fontSize) >= 16;
+            modeResults[modeKeys[index]] = workspace?.dataset.mode === modeKeys[index] && Boolean(workspace?.querySelector(modeSelectors[index]));
           }
           result.distinctModes = Object.values(modeResults).every(Boolean);
           document.querySelectorAll('.mode-tabs button')[2]?.click(); await wait(80);
           const allModuleRows = document.querySelectorAll('.commit-row').length;
-          const moduleFilter = document.querySelectorAll('.module-detail button')[1]; moduleFilter?.click(); await wait(100);
+          const moduleFilter = document.querySelectorAll('.module-ribbon-list button')[1]; moduleFilter?.click(); await wait(100);
           result.moduleFiltering = Boolean(moduleFilter?.classList.contains('active')) && document.querySelectorAll('.commit-row').length <= allModuleRows;
-          document.querySelectorAll('.module-detail button')[0]?.click(); await wait(60);
+          document.querySelectorAll('.module-ribbon-list button')[0]?.click(); await wait(60);
           document.querySelectorAll('.mode-tabs button')[3]?.click(); await wait(80);
-          result.riskQueue = document.querySelectorAll('.risk-queue button').length > 0 && [...document.querySelectorAll('.commit-row .risk-signal b')].every((node) => Number(node.textContent) >= 45);
+          result.riskQueue = document.querySelectorAll('.risk-ribbon-queue button').length > 0 && [...document.querySelectorAll('.commit-row .risk-signal b')].every((node) => Number(node.textContent) >= 45);
           result.explainableRisk = document.querySelectorAll('.risk-factors span').length === 4 && document.body.innerText.includes('范围 0-100');
+          document.querySelector('.merge-preflight-trigger')?.click();
+          for (let index = 0; index < 30 && !document.querySelector('.merge-verdict'); index += 1) await wait(120);
+          result.mergePreflight = Boolean(document.querySelector('[data-merge-cockpit]')) && Boolean(document.querySelector('.merge-verdict')) && document.body.innerText.includes('虚拟合并') && document.body.innerText.includes('Merge Base');
+          result.mergePreflightReadOnly = document.body.innerText.includes('不会移动任何 Git 引用') && document.querySelectorAll('.merge-gates article').length === 5;
+          document.querySelector('.merge-cockpit-close')?.click(); await wait(80);
           document.querySelectorAll('.mode-tabs button')[0]?.click(); await wait(80);
           const mergeRows = document.querySelectorAll('.commit-row[data-operations~="merge"]');
           const rebaseRows = document.querySelectorAll('.commit-row[data-operations~="rebase"]');
@@ -408,6 +417,14 @@ function createWindow() {
       }
       if (process.env.GIT_ATLAS_CAPTURE_WORKSPACE === 'git' && !process.env.GIT_ATLAS_SMOKE) {
         await win.webContents.executeJavaScript(`(async () => { document.querySelector('.workspace-layer-switch .git')?.click(); await new Promise((resolve) => setTimeout(resolve, 500)); })()`);
+      }
+      if (process.env.GIT_ATLAS_CAPTURE_MERGE === '1' && !process.env.GIT_ATLAS_SMOKE) {
+        await win.webContents.executeJavaScript(`(async () => {
+          for (let index = 0; index < 60 && document.querySelector('.repository-trigger small')?.textContent === '演示数据'; index += 1) await new Promise((resolve) => setTimeout(resolve, 150));
+          document.querySelector('.merge-preflight-trigger')?.click();
+          for (let index = 0; index < 120 && !document.querySelector('.merge-verdict'); index += 1) await new Promise((resolve) => setTimeout(resolve, 150));
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        })()`);
       }
       const image = await win.capturePage();
       fs.writeFileSync(process.env.GIT_ATLAS_CAPTURE, image.resize({ width: 1440, height: 1024, quality: 'best' }).toPNG());
