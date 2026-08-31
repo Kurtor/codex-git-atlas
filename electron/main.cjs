@@ -7,6 +7,7 @@ const { promisify } = require('node:util');
 const { attachBranchOperations } = require('./branch-operations.cjs');
 const { executeGitAction, getWorkspaceStatus } = require('./git-actions.cjs');
 const { loadCodexEvidence, stopCodexEvidence } = require('./codex-evidence.cjs');
+const { createMergePreflight } = require('./merge-preflight.cjs');
 
 if (process.env.GIT_ATLAS_QA_USER_DATA) app.setPath('userData', path.resolve(process.env.GIT_ATLAS_QA_USER_DATA));
 
@@ -427,6 +428,14 @@ ipcMain.handle('repo:recent', () => readRecentRepos());
 ipcMain.handle('repo:browse', (_event, directoryPath) => browseDirectory(directoryPath));
 ipcMain.handle('git:status', (_event, repoPath) => getWorkspaceStatus(repoPath));
 ipcMain.handle('git:action', (_event, repoPath, action, payload) => executeGitAction(repoPath, action, payload));
+ipcMain.handle('merge:preflight', (_event, repoPath, source, target) => createMergePreflight(repoPath, source, target));
+ipcMain.handle('merge:codex-review', async (_event, repoPath, source, target) => {
+  const preflight = await createMergePreflight(repoPath, source, target);
+  const changedFiles = preflight.files.slice(0, 60).map((file) => `${file.status} ${file.path} (+${file.additions}/-${file.deletions})`).join('\n');
+  const prompt = `请以只读方式评审 Git 分支 ${preflight.source} 合并到 ${preflight.target}。\n\nGit 实证：\n- Merge Base: ${preflight.mergeBase.shortHash} ${preflight.mergeBase.subject}\n- 源分支领先 ${preflight.ahead}，落后 ${preflight.behind}\n- 虚拟合并：${preflight.virtualMerge.state}\n- 变更：${preflight.files.length} 个文件，+${preflight.additions}/-${preflight.deletions}\n- 工作区：${preflight.workingTreeClean ? '干净' : `${preflight.dirtyCount} 项未提交`}\n\n文件：\n${changedFiles || '无'}\n\n请用中文输出：1. 一句话合并结论；2. 行为层面的关键变化；3. 必须人工检查的位置；4. 缺少的验证；5. 最小回滚方案。把推断明确标为“AI 推断”，不要修改文件，不要执行写操作。`;
+  const { stdout, stderr } = await execFileAsync('codex', ['exec', '--ephemeral', '--sandbox', 'read-only', '-C', repoPath, prompt], { cwd: repoPath, timeout: 180000, maxBuffer: 8 * 1024 * 1024, windowsHide: true });
+  return (stdout || stderr).trim();
+});
 ipcMain.handle('codex:context', () => getCodexProjectContext());
 ipcMain.handle('codex:evidence-enabled', () => readCodexEvidenceEnabled());
 ipcMain.handle('codex:evidence-set-enabled', (_event, enabled) => saveCodexEvidenceEnabled(enabled));

@@ -39,6 +39,18 @@ export type GitWorkspaceStatus = {
 
 export type GitActionResult = { action: GitAction; command: string; summary: string; output: string };
 
+export type MergePreflightCommit = { hash: string; shortHash: string; subject: string; author: string; isoDate: string };
+export type MergePreflightFile = { path: string; status: string; module: string; additions: number; deletions: number };
+export type MergePreflight = {
+  source: string; target: string; currentBranch: string;
+  mergeBase: { hash: string; shortHash: string; subject: string };
+  relation: 'up-to-date' | 'ahead' | 'behind' | 'diverged'; ahead: number; behind: number;
+  workingTreeClean: boolean; dirtyCount: number;
+  virtualMerge: { state: 'clean' | 'conflicts' | 'unavailable'; conflicts: string[]; messages: string[] };
+  commits: MergePreflightCommit[]; files: MergePreflightFile[]; additions: number; deletions: number;
+  modules: { name: string; churn: number }[]; observedAt: number;
+};
+
 export type CommitDetails = {
   fullHash: string; shortHash: string; subject: string; author: string; email: string; isoDate: string;
   parents: string[]; files: { file: string; additions: number; deletions: number }[];
@@ -86,6 +98,8 @@ declare global {
       browseDirectory(path?: string): Promise<DirectoryListing>;
       getWorkspaceStatus(path: string): Promise<GitWorkspaceStatus>;
       runGitAction(path: string, action: GitAction, payload?: { message?: string; branch?: string }): Promise<GitActionResult>;
+      runMergePreflight(path: string, source: string, target: string): Promise<MergePreflight>;
+      reviewMergeWithCodex(path: string, source: string, target: string): Promise<string>;
       getCodexProjectContext(): Promise<CodexProjectContext>;
       getCodexEvidenceEnabled(): Promise<boolean>;
       setCodexEvidenceEnabled(enabled: boolean): Promise<boolean>;

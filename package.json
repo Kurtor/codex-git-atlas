@@ -12,6 +12,7 @@
     "test:operations": "node scripts/test-branch-operations.mjs",
     "test:git-actions": "node scripts/test-git-actions.mjs",
     "test:codex-evidence": "node scripts/test-codex-evidence.mjs",
+    "test:merge-preflight": "node scripts/test-merge-preflight.mjs",
     "typecheck": "tsc --noEmit",
     "build:web": "vite build",
     "build": "npm run typecheck && vite build && node scripts/build-portable.mjs",

@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('gitAtlas', {
   browseDirectory: (directoryPath) => ipcRenderer.invoke('repo:browse', directoryPath),
   getWorkspaceStatus: (repoPath) => ipcRenderer.invoke('git:status', repoPath),
   runGitAction: (repoPath, action, payload) => ipcRenderer.invoke('git:action', repoPath, action, payload),
+  runMergePreflight: (repoPath, source, target) => ipcRenderer.invoke('merge:preflight', repoPath, source, target),
+  reviewMergeWithCodex: (repoPath, source, target) => ipcRenderer.invoke('merge:codex-review', repoPath, source, target),
   getCodexProjectContext: () => ipcRenderer.invoke('codex:context'),
   getCodexEvidenceEnabled: () => ipcRenderer.invoke('codex:evidence-enabled'),
   setCodexEvidenceEnabled: (enabled) => ipcRenderer.invoke('codex:evidence-set-enabled', enabled),
